@@ -9,4 +9,4 @@ Terminal=false
 StartupNotify=true
 Categories=Utility;TextEditor;
 MimeType=text/markdown;text/x-markdown;
-Keywords=markdown;notes;obsidian;wiki;
+Keywords=markdown;notes;wiki;

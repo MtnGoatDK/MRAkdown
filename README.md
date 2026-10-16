@@ -1,7 +1,8 @@
 # MRAkdown
 
-A lightweight Markdown viewer and editor for Windows and Linux, in the spirit of Obsidian but without vaults:
-double-click a `.md` file and it opens, with the folder around it in a sidebar.
+A lightweight Markdown viewer and editor for Windows and Linux. Double-click a `.md` file and it opens, with the folder
+around it in a sidebar: there's no vault to set up. It reads notes written for Obsidian, with their `[[wikilinks]]` and
+callouts.
 
 ![MRAkdown with a note on the left and a comparison with the last git commit on the right](assets/screenshot.png)
 
@@ -10,8 +11,8 @@ Windows first; the Linux version is newer and has only been tested on GNOME (Way
 
 ## Features
 
-- **Reading view in Obsidian style:** `[[wikilinks]]` (also to headings and with aliases), callouts, highlights, task
-  lists, tables, footnotes, embedded images and syntax-highlighted code
+- **Reading view:** `[[wikilinks]]` (also to headings and with aliases) and callouts as in Obsidian, plus
+  highlights, task lists, tables, footnotes, embedded images and syntax-highlighted code
 - **Folder sidebar** with search by file name and path. Opening a file shows its nearest `.obsidian` or `.git`
   folder, or else its own folder. Choose whether the sidebar lists Markdown files only, also files with a viewer of
   their own, or all files; hidden files and folders and `node_modules` are left out.
@@ -144,3 +145,5 @@ MRAkdown is free software under the [GNU General Public License v3.0](LICENSE).
 It uses [Markdig](https://github.com/xoofx/markdig) (BSD-2-Clause), [Gir.Core](https://gircore.github.io/) (MIT) and
 the WebView2 SDK (BSD-3-Clause style, Microsoft), and includes [highlight.js](https://highlightjs.org/) 11.9.0
 (BSD-3-Clause) in `web/hljs*`.
+
+MRAkdown isn't affiliated with or endorsed by Obsidian.
