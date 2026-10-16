@@ -1,5 +1,13 @@
 const $ = (sel) => document.querySelector(sel);
-const post = (msg) => window.chrome?.webview?.postMessage(msg);
+// The host app: WebView2 on Windows; on Linux the WebKitGTK host posts to a script message handler
+// and answers through a "host-message" event (see MainWindow.cs in MRAkdown.Linux).
+const hostBridge = window.chrome?.webview ?? {
+  postMessage: (msg) => window.webkit?.messageHandlers?.host?.postMessage(msg),
+  addEventListener: (type, listener) => window.addEventListener('host-message', (e) => listener({ data: e.detail })),
+};
+const post = (msg) => hostBridge.postMessage(msg);
+/** True for URLs served by the host. Compares scheme and host: the Linux host's custom scheme has an opaque origin. */
+const isAppUrl = (url) => url.protocol === location.protocol && url.host === location.host;
 const esc = (s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const store = {
@@ -814,7 +822,7 @@ function noteLink(a) {
   if (!href || href.startsWith('#') || a.classList.contains('unresolved')) return null;
   const url = new URL(href, location.href);
   // Note and file URLs look like /f/{root id}/{path}
-  const m = url.origin === location.origin && url.pathname.match(/^\/f\/([^/]+)\/(.+)$/);
+  const m = isAppUrl(url) && url.pathname.match(/^\/f\/([^/]+)\/(.+)$/);
   if (!m) return null;
   const path = decodeURIComponent(m[2]);
   return /\.(md|markdown)$/i.test(path) ? { root: m[1], path, hash: url.hash } : null;
@@ -838,9 +846,9 @@ function onContentLink(e, middle) {
     return;
   }
   const url = new URL(href, location.href);
-  const file = url.origin === location.origin && url.pathname.match(/^\/f\/([^/]+)\/(.+)$/);
+  const file = isAppUrl(url) && url.pathname.match(/^\/f\/([^/]+)\/(.+)$/);
   if (file) post({ type: 'openFile', root: file[1], path: decodeURIComponent(file[2]) });
-  else if (url.origin !== location.origin) post({ type: 'open', url: url.href });
+  else if (!isAppUrl(url)) post({ type: 'open', url: url.href });
 }
 $('#content').addEventListener('click', (e) => onContentLink(e, false));
 $('#content').addEventListener('auxclick', (e) => { if (e.button === 1) onContentLink(e, true); });
@@ -1041,9 +1049,76 @@ function toggleSidebar() {
 }
 for (const btn of document.querySelectorAll('.toggle-side')) btn.onclick = toggleSidebar;
 
+/* ---------- Window title bar (Linux) ---------- */
+
+// The Linux host shows no title bar. It sets hostWindowControls ({ left, right }: lists of 'minimize', 'maximize'
+// and 'close' from the desktop's button layout), and the top of the page does a title bar's job instead.
+if (window.hostWindowControls) {
+  const ICONS = {
+    minimize: '<path d="M6 12h12"/>',
+    maximize: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
+    close: '<path d="M17 7 7 17"/><path d="m7 7 10 10"/>',
+  };
+  const TITLES = { minimize: 'Minimize', maximize: 'Maximize', close: 'Close' };
+  const controls = (buttons, side) => {
+    const group = document.createElement('div');
+    group.className = `window-controls ${side}`;
+    for (const name of buttons) {
+      const btn = document.createElement('button');
+      btn.title = TITLES[name];
+      btn.setAttribute('aria-label', TITLES[name]);
+      btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+      btn.onclick = () => post({ type: name === 'close' ? 'closeWindow' : name });
+      group.append(btn);
+    }
+    return group;
+  };
+  const { left, right } = window.hostWindowControls;
+  // Buttons on the left sit in the folder panel's header, or in the tab bar while the panel is hidden.
+  if (left.length) {
+    $('.side-head').prepend(controls(left, 'left'));
+    $('#tabbar').prepend(controls(left, 'left'));
+  }
+  if (right.length) $('#tabbar').append(controls(right, 'right'));
+
+  // The empty parts of the top bar: dragging them moves the window, and double, middle and right clicks do what
+  // the desktop does for title bars. (Double-clicking the empty tab strip keeps opening a new tab.)
+  const isEmptyBar = (el) => el.matches('#tabbar, #tabs, .side-head, #root-name, .window-controls');
+  for (const bar of [$('#tabbar'), $('.side-head')]) {
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !isEmptyBar(e.target)) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const move = (ev) => {
+        if (!(ev.buttons & 1)) return stop();
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
+        stop();
+        post({ type: 'windowDrag', x: ev.clientX, y: ev.clientY });
+      };
+      const stop = () => {
+        removeEventListener('pointermove', move);
+        removeEventListener('pointerup', stop);
+      };
+      addEventListener('pointermove', move);
+      addEventListener('pointerup', stop);
+    });
+    bar.addEventListener('dblclick', (e) => {
+      if (isEmptyBar(e.target) && e.target !== $('#tabs')) post({ type: 'titlebarGesture', gesture: 'double-click' });
+    });
+    bar.addEventListener('auxclick', (e) => {
+      if (e.button === 1 && isEmptyBar(e.target)) post({ type: 'titlebarGesture', gesture: 'middle-click' });
+    });
+    bar.addEventListener('contextmenu', (e) => {
+      if (!isEmptyBar(e.target)) return;
+      e.preventDefault();
+      post({ type: 'titlebarGesture', gesture: 'right-click' });
+    });
+  }
+}
+
 /* ---------- Messages from the host ---------- */
 
-window.chrome?.webview?.addEventListener('message', async (e) => {
+hostBridge.addEventListener('message', async (e) => {
   const msg = e.data;
   switch (msg?.type) {
     case 'saveAndClose': {

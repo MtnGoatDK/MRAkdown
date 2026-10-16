@@ -1,9 +1,10 @@
 # MRAkdown
 
-A lightweight Markdown viewer and editor for Windows, in the spirit of Obsidian but without vaults:
+A lightweight Markdown viewer and editor for Windows and Linux, in the spirit of Obsidian but without vaults:
 double-click a `.md` file and it opens, with the folder around it in a sidebar.
 
-Built with .NET 10 (WinForms), WebView2 and [Markdig](https://github.com/xoofx/markdig).
+Built with .NET 10 and [Markdig](https://github.com/xoofx/markdig). The UI is a web page (`web/`) shown by a small native
+host: WinForms + WebView2 on Windows, GTK 4 + libadwaita + WebKitGTK (through [Gir.Core](https://gircore.github.io/)) on Linux.
 
 ## Features
 
@@ -14,7 +15,7 @@ Built with .NET 10 (WinForms), WebView2 and [Markdig](https://github.com/xoofx/m
 - One running instance: opening more files adds tabs to the open window
 - New files with Save As; any other file opens as text, with JSON, CSV/TSV, XML and text viewers
 - Keeps file encodings (UTF-8, UTF-16, Windows-1252) and line endings when saving
-- Follows the Windows light/dark theme; choose your own accent colour
+- Follows the system light/dark theme; choose your own accent colour
 
 ## Project layout
 
@@ -22,7 +23,9 @@ Built with .NET 10 (WinForms), WebView2 and [Markdig](https://github.com/xoofx/m
 |---|---|
 | `src/MRAkdown.Core` | Note index, Markdown rendering, wikilinks, file encodings, and serving the page (`NoteServer`) |
 | `src/MRAkdown.Windows` | Windows host: WinForms window with WebView2 |
-| `web/` | The page itself (embedded in Core) |
+| `src/MRAkdown.Linux` | Linux host: libadwaita window with WebKitGTK; the page is served under `mrakdown://notes/` |
+| `web/` | The page itself, shared by both hosts (embedded in Core) |
+| `packaging/linux` | Desktop entry and per-user install script |
 
 ## Build on Windows
 
@@ -39,6 +42,27 @@ dotnet publish src\MRAkdown.Windows -c Release -r win-x64 --self-contained false
 ```
 
 The app icon is generated from `web/logo.svg` with `assets/make-icon.ps1`.
+
+## Build on Linux
+
+Needs the .NET 10 SDK, GTK 4, libadwaita and WebKitGTK 6.0 (on Arch/CachyOS: `dotnet-sdk gtk4 libadwaita webkitgtk-6.0`).
+
+```sh
+packaging/linux/install.sh            # build and install for the current user (~/.local)
+packaging/linux/install.sh --default  # ...and make it the default app for .md files
+packaging/linux/install.sh --uninstall
+```
+
+Or run it from the repo: `dotnet run --project src/MRAkdown.Linux -- [file or folder]`.
+`MRAKDOWN_DEVTOOLS=1` enables Inspect Element and prints the page's console messages.
+
+Differences from Windows:
+
+- Wayland doesn't tell apps where windows are, so dropping a tab onto another window relies on that window noticing
+  the pointer entering it, and new windows open where the desktop puts them.
+- There is no separate title bar: drag the empty part of the top bar to move the window. Double, middle and right
+  clicks there do what your desktop does for title bars, and the window buttons follow its button layout.
+- If pages render blank or with glitches on NVIDIA, try `WEBKIT_DISABLE_DMABUF_RENDERER=1`.
 
 ## Keyboard shortcuts
 

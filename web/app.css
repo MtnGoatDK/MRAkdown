@@ -285,6 +285,23 @@ body[data-mode="edit"] #view { display: none; }
 .settings-reset:hover { color: var(--text); text-decoration: underline; }
 
 /* "Show folder panel" sits at the left of the tab bar, only while the panel is hidden */
+/* Window buttons, on Linux where the page's top bar is the title bar (see hostWindowControls in app.js) */
+.window-controls { display: flex; align-self: center; align-items: center; gap: 6px; }
+.window-controls button {
+  display: flex;
+  padding: 3px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--hover);
+  color: var(--muted);
+  cursor: pointer;
+}
+.window-controls button:hover { background: color-mix(in srgb, var(--text) 15%, transparent); color: var(--text); }
+.side-head .window-controls.left { margin-right: 8px; }
+#tabbar .window-controls.left { display: none; margin-right: 4px; }
+body.side-hidden #tabbar .window-controls.left { display: flex; }
+#tabbar .window-controls.right { margin-left: 6px; }
+
 #show-side { display: none; align-self: center; }
 body.side-hidden #show-side { display: flex; }
 /* Formatting toolbar toggle: only relevant while editing */

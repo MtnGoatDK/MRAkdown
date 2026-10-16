@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Linux host: GTK 4 + libadwaita window with a WebKitGTK view, through Gir.Core. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>mrakdown</AssemblyName>
+    <RootNamespace>MRAkdown</RootNamespace>
+    <!-- Precompile on publish (ReadyToRun) so less code is JIT-compiled at startup; needs a fixed runtime. -->
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WebKitGTK is Linux-only; this tells the platform analyzer so. -->
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>linux</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MRAkdown.Core\MRAkdown.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GirCore.Adw-1" Version="0.8.1" />
+    <PackageReference Include="GirCore.WebKit-6.0" Version="0.8.1" />
+  </ItemGroup>
+
+</Project>

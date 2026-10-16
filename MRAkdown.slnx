@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/MRAkdown.Core/MRAkdown.Core.csproj" />
+    <Project Path="src/MRAkdown.Linux/MRAkdown.Linux.csproj" />
     <Project Path="src/MRAkdown.Windows/MRAkdown.Windows.csproj" />
   </Folder>
 </Solution>
