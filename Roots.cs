@@ -1,0 +1,101 @@
+using System.Security.Cryptography;
+using System.Text;
+
+namespace MRAkdown;
+
+/// <summary>
+/// Process-wide registry of open note folders. Each folder gets one <see cref="NoteIndex"/>
+/// and one file watcher, shared by every window and tab that shows it.
+/// Must be used from the UI thread.
+/// </summary>
+static class Roots
+{
+    public static readonly string DataDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MRAkdown");
+    static readonly string LastRootFile = Path.Combine(DataDir, "last-folder.txt");
+
+    static readonly Dictionary<string, NoteIndex> ById = new();
+
+    /// <summary>Raised on the UI thread after a folder's index was rebuilt because files changed.</summary>
+    public static event Action<NoteIndex>? Changed;
+
+    public static NoteIndex Get(string folder)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        var id = IdFor(full);
+        if (!ById.TryGetValue(id, out var index))
+        {
+            index = new NoteIndex(full, id);
+            ById[id] = index;
+            Watch(index);
+        }
+        SaveLastRoot(full);
+        return index;
+    }
+
+    public static NoteIndex? Find(string? id) => id is not null ? ById.GetValueOrDefault(id) : null;
+
+    /// <summary>The folder to use for a file: its nearest Obsidian vault or git repo, else its own folder.</summary>
+    public static NoteIndex ForFile(string file)
+    {
+        var dir = Path.GetDirectoryName(Path.GetFullPath(file))!;
+        for (var d = new DirectoryInfo(dir); d is not null; d = d.Parent)
+        {
+            if (Path.Exists(Path.Combine(d.FullName, ".obsidian")) || Path.Exists(Path.Combine(d.FullName, ".git")))
+                return Get(d.FullName);
+        }
+        return Get(dir);
+    }
+
+    public static string? ReadLastRoot()
+    {
+        try
+        {
+            var path = File.ReadAllText(LastRootFile).Trim();
+            return Directory.Exists(path) ? path : null;
+        }
+        catch (IOException) { return null; }
+    }
+
+    static void SaveLastRoot(string root)
+    {
+        try
+        {
+            Directory.CreateDirectory(DataDir);
+            File.WriteAllText(LastRootFile, root);
+        }
+        catch (IOException) { }
+    }
+
+    static string IdFor(string fullPath) =>
+        Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(fullPath.ToLowerInvariant())))[..10];
+
+    static void Watch(NoteIndex index)
+    {
+        var ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Roots must be used on the UI thread");
+        var debounce = new System.Windows.Forms.Timer { Interval = 250 };
+        debounce.Tick += async (_, _) =>
+        {
+            debounce.Stop();
+            await index.Rebuild();
+            Changed?.Invoke(index);
+        };
+
+        var watcher = new FileSystemWatcher(index.Root)
+        {
+            IncludeSubdirectories = true,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+        };
+        FileSystemEventHandler onChange = (_, e) =>
+        {
+            // Ignore churn inside .git, .obsidian etc.
+            if (Path.GetRelativePath(index.Root, e.FullPath).Split('\\').Any(s => s.StartsWith('.'))) return;
+            ui.Post(_ => { debounce.Stop(); debounce.Start(); }, null);
+        };
+        watcher.Changed += onChange;
+        watcher.Created += onChange;
+        watcher.Deleted += onChange;
+        watcher.Renamed += (s, e) => onChange(s, e);
+        watcher.EnableRaisingEvents = true;
+    }
+}

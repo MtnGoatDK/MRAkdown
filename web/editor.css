@@ -1,0 +1,77 @@
+#editor-pane { display: none; flex: 1; min-width: 0; flex-direction: column; }
+
+/* Formatting toolbar above the editor */
+.md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+body[data-mode="edit"] .md-toolbar { justify-content: center; }
+body.hide-format .md-toolbar,
+body.plain-file .md-toolbar { display: none; }
+.md-toolbar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.md-toolbar button:hover { background: var(--hover); color: var(--text); }
+.md-toolbar button:active { background: var(--accent-soft); color: var(--accent); }
+.md-text { font-size: 12.5px; font-weight: 700; letter-spacing: -0.02em; }
+.md-sep { width: 1px; height: 18px; margin: 0 6px; background: var(--border); }
+#editor-pane:has(#editor:disabled) .md-toolbar button { opacity: 0.4; cursor: default; }
+body[data-mode="edit"] #editor-pane,
+body[data-mode="split"] #editor-pane { display: flex; }
+body[data-mode="split"] #editor-pane { flex: 0 0 var(--split, 50%); }
+
+/* Draggable divider between editor and preview, split mode only */
+#split-resizer {
+  display: none;
+  flex-shrink: 0;
+  width: 7px;
+  margin: 0 -3px;
+  z-index: 1;
+  background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat;
+  cursor: col-resize;
+}
+body[data-mode="split"] #split-resizer { display: block; }
+#split-resizer:hover, #split-resizer.dragging {
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-size: 3px 100%;
+}
+/* Don't let the textarea or preview steal pointer events mid-drag */
+body:has(#split-resizer.dragging) { cursor: col-resize; user-select: none; }
+body:has(#split-resizer.dragging) #editor-pane,
+body:has(#split-resizer.dragging) #view { pointer-events: none; }
+
+#editor {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 28px max(48px, calc((100% - 760px) / 2)) 160px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: var(--bg);
+  color: var(--text);
+  font: 14.5px/1.7 "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  tab-size: 4;
+}
+#editor::placeholder { color: var(--faint); }
+#editor::selection { background: var(--accent-soft); }
+
+body[data-mode="split"] #editor { padding: 28px 32px 160px; }
+body[data-mode="split"] .markdown { padding-left: 32px; padding-right: 32px; }

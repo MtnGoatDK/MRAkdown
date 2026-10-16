@@ -1,0 +1,19 @@
+<!-- MRAkdown logo: card with "M↓" side by side, bold enough to read at 16 px. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#323b4d"/>
+      <stop offset="1" stop-color="#161b26"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffc35c"/>
+      <stop offset="1" stop-color="#ff5f1f"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="248" height="248" rx="56" fill="url(#bg)"/>
+  <rect x="26" y="54" width="204" height="148" rx="18"
+        fill="#fff3e8" stroke="url(#edge)" stroke-width="16" stroke-linejoin="round"/>
+  <text x="98" y="166" text-anchor="middle" fill="#1b2233" font-family="Segoe UI, sans-serif" font-weight="900" font-size="104">M</text>
+  <path d="M180 92V146" stroke="#1b2233" stroke-width="24" stroke-linecap="round"/>
+  <path d="M152 136H208L180 172Z" fill="#1b2233" stroke="#1b2233" stroke-width="10" stroke-linejoin="round"/>
+</svg>

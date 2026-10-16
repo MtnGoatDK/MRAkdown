@@ -1,0 +1,127 @@
+/* Viewers for non-Markdown files (text, JSON, CSV, XML). Loaded with viewers.js. */
+
+:root {
+  --v-str: #0a7a3a;
+  --v-num: #1d4ed8;
+  --v-lit: #9333ea;
+  --v-attr: #b45309;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --v-str: #7ec699;
+    --v-num: #79b8ff;
+    --v-lit: #c792ea;
+    --v-attr: #f0b37e;
+  }
+}
+
+.markdown.viewer-wide { max-width: none; }
+
+.viewer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -0.2em 0 1em;
+  font-size: 13px;
+  color: var(--muted);
+}
+.viewer-error { color: #e93147; }
+.viewer-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.viewer-actions button, .viewer-more {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.viewer-actions button:hover, .viewer-more:hover { background: var(--hover); color: var(--text); }
+.viewer-actions button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.viewer-more { margin: 8px 0 0 22px; }
+.viewer-view-as { display: flex; align-items: center; gap: 6px; margin-left: 6px; color: var(--faint); font-size: 12.5px; }
+.viewer-select {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.viewer-select:focus { outline: none; border-color: var(--accent); }
+
+/* No ligatures: in data, "<!--" or "->" should look exactly as written */
+.viewer-body { font: 13px/1.6 "Cascadia Code", Consolas, monospace; font-variant-ligatures: none; }
+
+/* Text: line numbers in a gutter */
+.text-lines { overflow-x: auto; }
+.tl { display: flex; }
+.tl-no {
+  flex: 0 0 var(--gutter, 4ch);
+  padding-right: 12px;
+  text-align: right;
+  color: var(--faint);
+  user-select: none;
+}
+.tl-text { white-space: pre; }
+.text-lines.wrap .tl-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* JSON and XML trees */
+.tree { overflow-x: auto; }
+.t-row { white-space: pre; cursor: default; }
+.t-head { cursor: pointer; border-radius: 4px; }
+.t-head:hover { background: var(--hover); }
+.t-toggle { display: inline-block; width: 16px; color: var(--faint); transition: transform 0.1s; }
+.t-node.open > .t-head .t-toggle { transform: rotate(90deg); }
+.t-kids { padding-left: 18px; border-left: 1px solid var(--border); margin-left: 7px; }
+.t-node:not(.open) > .t-kids, .t-node:not(.open) > .t-close { display: none; }
+.t-node.open > .t-head .t-collapsed { display: none; }
+.t-summary { margin: 0 6px; padding: 0 6px; border-radius: 4px; background: var(--hover); color: var(--faint); font-size: 12px; }
+.t-punct { color: var(--faint); }
+
+.j-key { color: var(--accent); }
+.j-index { color: var(--faint); }
+.j-str { color: var(--v-str); }
+.j-num { color: var(--v-num); }
+.j-bool, .j-null { color: var(--v-lit); }
+
+.x-tag { color: var(--accent); }
+.x-attr { color: var(--v-attr); }
+.x-val { color: var(--v-str); }
+.x-text { color: var(--text); }
+.x-comment, .x-pi { color: var(--faint); font-style: italic; }
+.x-cdata { color: var(--v-num); }
+
+/* CSV table */
+.csv-wrap { overflow: auto; max-height: calc(100vh - 200px); border: 1px solid var(--border); border-radius: 6px; }
+.csv-table { border-collapse: collapse; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; white-space: nowrap; }
+.markdown .csv-table { display: table; margin: 0; }
+.csv-table th, .csv-table td { padding: 5px 12px; border: 1px solid var(--border); }
+.csv-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0;
+  background: var(--bg-side);
+}
+.csv-table th button {
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.csv-table th button:hover { background: var(--hover); }
+.csv-sort { color: var(--accent); }
+.csv-table tbody tr:nth-child(even) { background: var(--hover); }
+.csv-table .csv-no { color: var(--faint); text-align: right; font-variant-numeric: tabular-nums; }
+.csv-table thead .csv-no { padding: 6px 12px; }
+.csv-table .csv-num { text-align: right; font-variant-numeric: tabular-nums; }
+.csv-wrap .viewer-more { margin: 8px; }
