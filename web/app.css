@@ -1,4 +1,6 @@
 :root {
+  /* Native controls (dropdowns, checkboxes, inputs) follow the theme too; WebKitGTK otherwise draws them light. */
+  color-scheme: light dark;
   --bg: #ffffff;
   --bg-side: #f6f6f6;
   --text: #2e3338;
