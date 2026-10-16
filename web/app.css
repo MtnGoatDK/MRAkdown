@@ -169,8 +169,9 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   border-bottom: 1px solid var(--border);
   background: var(--bg-side);
 }
+/* The tabs take only the room they need, so the + button follows the last tab; the rest of the bar stays empty. */
 .tabs {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   height: 100%;
   display: flex;
@@ -184,11 +185,13 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 0 1 200px;
+  flex: 0 1 auto;
+  width: 200px;
   min-width: 72px;
   height: 32px;
   margin-bottom: -1px;
-  padding: 0 4px 0 12px;
+  /* The extra space below lifts the title and close button to the middle of the bar, in line with its other buttons. */
+  padding: 0 4px 6px 12px;
   border: 1px solid transparent;
   border-bottom: 0;
   border-radius: 8px 8px 0 0;
@@ -230,7 +233,20 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   pointer-events: none;
 }
 
+.new-tab {
+  display: flex;
+  flex-shrink: 0;
+  align-self: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+.new-tab:hover { background: var(--hover); color: var(--text); }
 .toolbar {
+  margin-left: auto;
   display: flex;
   align-self: center;
   align-items: center;

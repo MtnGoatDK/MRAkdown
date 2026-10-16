@@ -68,7 +68,8 @@ your `PATH`). To update, close MRAkdown and run the install script again.
 Differences from Windows:
 
 - There is no separate title bar: drag the empty part of the top bar to move the window. Double, middle and right
-  clicks there do what your desktop does for title bars, and the window buttons follow the desktop's button layout.
+  clicks there do what your desktop does for title bars (on Windows, double-clicking the empty tab strip opens a new
+  tab), and the window buttons follow the desktop's button layout.
 - Wayland doesn't tell apps where windows are, so dropping a tab onto another window relies on that window noticing
   the pointer entering it, and new windows open where the desktop puts them.
 - If pages render blank or with glitches on NVIDIA graphics, try starting it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`.

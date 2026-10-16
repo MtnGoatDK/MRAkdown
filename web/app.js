@@ -386,8 +386,12 @@ function createPane(index = panes.length) {
   // Clicking or typing in a pane makes it the active one (capture: before the click itself is handled).
   el.addEventListener('pointerdown', () => focusPane(pane), true);
   el.addEventListener('focusin', () => focusPane(pane));
-  // Double-clicking the empty part of the tab bar opens a new tab, like in a browser.
-  pane.tabsEl.addEventListener('dblclick', (e) => { if (e.target === e.currentTarget) newEmptyTab(pane); });
+  el.querySelector('.new-tab').onclick = () => newEmptyTab(pane);
+  // Double-clicking the empty part of the tab bar opens a new tab too, on Windows. On Linux the tab bar is also the
+  // window's title bar, so a double-click there does what the desktop does for title bars (see "Window title bar").
+  pane.tabbarEl.addEventListener('dblclick', (e) => {
+    if (!window.hostWindowControls && (e.target === pane.tabbarEl || e.target === pane.tabsEl)) newEmptyTab(pane);
+  });
 
   const content = pane.contentEl;
   content.addEventListener('click', (e) => onContentLink(pane, e, false));
@@ -1584,7 +1588,7 @@ if (window.hostWindowControls) {
   if (right.length) windowButtons.right = controls(right, 'right');
 
   // The empty parts of the top bar: dragging them moves the window, and double, middle and right clicks do what
-  // the desktop does for title bars. (Double-clicking the empty tab strip keeps opening a new tab.)
+  // the desktop does for title bars.
   const isEmptyBar = (el) => el.matches('.tabbar, .tabs, .side-head, #root-name, .window-controls');
   for (const bar of [$('#panes'), $('.side-head')]) {
     bar.addEventListener('pointerdown', (e) => {
@@ -1605,7 +1609,7 @@ if (window.hostWindowControls) {
       addEventListener('pointerup', stop);
     });
     bar.addEventListener('dblclick', (e) => {
-      if (isEmptyBar(e.target) && !e.target.matches('.tabs')) post({ type: 'titlebarGesture', gesture: 'double-click' });
+      if (isEmptyBar(e.target)) post({ type: 'titlebarGesture', gesture: 'double-click' });
     });
     bar.addEventListener('auxclick', (e) => {
       if (e.button === 1 && isEmptyBar(e.target)) post({ type: 'titlebarGesture', gesture: 'middle-click' });
