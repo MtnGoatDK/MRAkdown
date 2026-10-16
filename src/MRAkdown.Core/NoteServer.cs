@@ -29,7 +29,7 @@ static class NoteServer
         try
         {
             if (path == "/__api/tree" && Roots.Find(query["r"]) is { } treeRoot)
-                return PageResponse.Json(await treeRoot.TreeJsonAsync());
+                return PageResponse.Json(await treeRoot.TreeJsonAsync(TreeFiles(query["files"])));
             if (path == "/")
                 return PageResponse.Ok(ReadResource("app.html"), "text/html");
             if (path.StartsWith("/__app/"))
@@ -74,6 +74,18 @@ static class NoteServer
             index.Save(note, BodyText());
             return PageResponse.Text("");
         }
+    }
+
+    /// <summary>
+    /// Which files the folder tree lists: Markdown only (no "files" parameter), everything ("*"),
+    /// or Markdown plus the given extensions ("txt,json,...").
+    /// </summary>
+    static Func<string, bool> TreeFiles(string? files)
+    {
+        if (string.IsNullOrEmpty(files)) return NoteIndex.IsMarkdown;
+        if (files == "*") return _ => true;
+        var extensions = files.Split(',').Select(e => "." + e.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return path => NoteIndex.IsMarkdown(path) || extensions.Contains(Path.GetExtension(path));
     }
 
     /// <summary>Maps /f/{root id}/{relative path} to a file on disk.</summary>

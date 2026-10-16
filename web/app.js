@@ -50,7 +50,18 @@ let editor = null;
 const apiQuery = (root, path) =>
   `?r=${encodeURIComponent(root)}` + (path != null ? `&n=${encodeURIComponent(path)}` : '');
 const noteTitle = (path) => path.slice(path.lastIndexOf('/') + 1).replace(/\.(md|markdown)$/i, '');
-const homeNote = (tree) => tree?.children.find((n) => !n.children && /^(readme|index|home)$/i.test(n.name));
+const isMarkdownPath = (path) => /\.(md|markdown)$/i.test(path);
+const extOf = (path) => (/\.([^./]+)$/.exec(path)?.[1] ?? '').toLowerCase();
+const homeNote = (tree) => tree?.children.find((n) => !n.children && isMarkdownPath(n.path) && /^(readme|index|home)$/i.test(n.name));
+
+// File types with their own viewer in viewers.js; any other text file opens as text or code.
+const VIEWER_KIND_BY_EXT = {
+  txt: 'text', log: 'text',
+  json: 'json',
+  csv: 'csv', tsv: 'csv',
+  xml: 'xml', config: 'xml', csproj: 'xml', props: 'xml', targets: 'xml', xaml: 'xml',
+  resx: 'xml', xsd: 'xml', xsl: 'xml', xslt: 'xml', svg: 'xml', plist: 'xml',
+};
 
 /* ---------- Sidebar ---------- */
 
@@ -70,9 +81,12 @@ function loadTree(root) {
 }
 
 async function fetchTree(root) {
-  const res = await fetch('/__api/tree' + apiQuery(root));
+  const show = treeShow;
+  const res = await fetch('/__api/tree' + apiQuery(root) + treeFilesQuery());
   if (!res.ok) return null;
   const tree = await res.json();
+  // The choice of files changed while this was loading; the newer request fills in the tree.
+  if (show !== treeShow) return tree;
   trees.set(root, tree);
   rootNames.set(root, tree.name);
   for (const t of tabs) if (t.root === root && !t.path) t.title = tree.name;
@@ -83,6 +97,37 @@ async function fetchTree(root) {
   }
   return tree;
 }
+
+// Which files the folder panel lists: notes only, notes and files with their own viewer, or everything.
+// The host filters the tree (see TreeFiles in NoteServer.cs), so big folders only send what is shown.
+const TREE_SHOW = { markdown: 'Markdown only', supported: 'Supported formats', all: 'All files' };
+let treeShow = TREE_SHOW[store.get('treeShow', 'markdown')] ? store.get('treeShow', 'markdown') : 'markdown';
+
+/** The "files" parameter for /__api/tree: which files the host lists (none: Markdown only, "*": all). */
+function treeFilesQuery() {
+  if (treeShow === 'all') return '&files=*';
+  if (treeShow === 'supported') return '&files=' + encodeURIComponent(Object.keys(VIEWER_KIND_BY_EXT).join(','));
+  return '';
+}
+
+function setTreeShow(value) {
+  treeShow = value;
+  store.set('treeShow', value);
+  $('#tree-show').classList.toggle('active', value !== 'markdown');
+  // Every folder's tree lists other files now: reload this one, and the others when they're shown again.
+  trees.clear();
+  if (currentRoot) loadTree(currentRoot);
+}
+
+$('#tree-show').classList.toggle('active', treeShow !== 'markdown');
+$('#tree-show').onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  showContextMenu(r.left, r.bottom + 4, Object.entries(TREE_SHOW).map(([value, label]) => ({
+    label,
+    checked: value === treeShow,
+    action: () => setTreeShow(value),
+  })));
+};
 
 function allNotes(node, out = []) {
   for (const child of node.children ?? []) {
@@ -117,7 +162,10 @@ function renderTree() {
     if (!matches.length) nav.innerHTML = `<div class="tree-empty">No matching files</div>`;
   } else {
     nav.append(...tree.children.map((n) => buildNode(n, root)));
-    if (!tree.children.length) nav.innerHTML = '<div class="tree-empty">No Markdown files in this folder</div>';
+    if (!tree.children.length) {
+      const what = { markdown: 'Markdown files', supported: 'supported files', all: 'files' }[treeShow];
+      nav.innerHTML = `<div class="tree-empty">No ${what} in this folder</div>`;
+    }
   }
   markActive();
 }
@@ -179,8 +227,12 @@ function showContextMenu(x, y, items) {
   menu.setAttribute('role', 'menu');
   for (const item of items) {
     const btn = document.createElement('button');
-    btn.setAttribute('role', 'menuitem');
-    btn.innerHTML = `<span>${esc(item.label)}</span>${item.hint ? `<kbd>${esc(item.hint)}</kbd>` : ''}`;
+    // Items with "checked" are choices: a check mark shows the current one.
+    const isChoice = item.checked !== undefined;
+    btn.setAttribute('role', isChoice ? 'menuitemradio' : 'menuitem');
+    if (isChoice) btn.setAttribute('aria-checked', String(item.checked));
+    const check = isChoice ? `<span class="menu-check">${item.checked ? '✓' : ''}</span>` : '';
+    btn.innerHTML = `<span>${check}${esc(item.label)}</span>${item.hint ? `<kbd>${esc(item.hint)}</kbd>` : ''}`;
     btn.onclick = () => {
       closeContextMenu();
       item.action();
@@ -688,7 +740,7 @@ function showNote(note) {
 let viewers = null;
 
 function showInViewer(content, note) {
-  const host = { store, highlightCode };
+  const host = { store, highlightCode, kindByExt: VIEWER_KIND_BY_EXT };
   if (viewers) {
     viewers.renderViewer(content, note, host);
     return;

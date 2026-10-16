@@ -82,7 +82,26 @@ sealed class NoteIndex
         if (scan == _scan) _snapshot = snapshot;
     }
 
-    public async Task<string> TreeJsonAsync() => JsonSerializer.Serialize((await _scan).Tree, Json);
+    /// <summary>The folder tree with only the files <paramref name="showFile"/> accepts, leaving out folders that end up empty.</summary>
+    public async Task<string> TreeJsonAsync(Func<string, bool> showFile) =>
+        JsonSerializer.Serialize(Filter((await _scan).Tree, showFile), Json);
+
+    static Node Filter(Node folder, Func<string, bool> showFile)
+    {
+        var children = new List<Node>();
+        foreach (var child in folder.Children!)
+        {
+            if (child.Children is null)
+            {
+                if (showFile(child.Path)) children.Add(child);
+            }
+            else if (Filter(child, showFile) is { Children.Count: > 0 } shown)
+            {
+                children.Add(shown);
+            }
+        }
+        return folder with { Children = children };
+    }
 
     public static bool IsMarkdown(string path) =>
         path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
@@ -109,12 +128,18 @@ sealed class NoteIndex
         }
 
         // Index files before descending so shallower notes win name collisions, like Obsidian.
+        // The tree lists every file except hidden ones; TreeJsonAsync picks the kinds the page asks for.
         var fileNodes = new List<Node>();
         foreach (var f in files.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
         {
             var rel = Rel(f);
-            s.FilesByName.TryAdd(Path.GetFileName(f), rel);
-            if (!IsMarkdown(f)) continue;
+            var fileName = Path.GetFileName(f);
+            s.FilesByName.TryAdd(fileName, rel);
+            if (!IsMarkdown(f))
+            {
+                if (!fileName.StartsWith('.')) fileNodes.Add(new Node(fileName, rel, null));
+                continue;
+            }
             var name = Path.GetFileNameWithoutExtension(f);
             s.NotesByName.TryAdd(name, rel);
             s.NotesByPath.TryAdd(StripExtension(rel), rel);
@@ -129,7 +154,7 @@ sealed class NoteIndex
             if (Walk(d, s) is { } node) dirNodes.Add(node);
         }
 
-        // Hide folders that contain no notes.
+        // Leave out empty folders; TreeJsonAsync also leaves out folders with none of the files asked for.
         if (fileNodes.Count == 0 && dirNodes.Count == 0 && dir != Root) return null;
         return new Node(Path.GetFileName(dir), Rel(dir), [.. dirNodes, .. fileNodes]);
     }

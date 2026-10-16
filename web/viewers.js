@@ -9,14 +9,6 @@ document.head.append(css);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const fmt = (n) => n.toLocaleString();
 
-const KIND_BY_EXT = {
-  txt: 'text', log: 'text',
-  json: 'json',
-  csv: 'csv', tsv: 'csv',
-  xml: 'xml', config: 'xml', csproj: 'xml', props: 'xml', targets: 'xml', xaml: 'xml',
-  resx: 'xml', xsd: 'xml', xsl: 'xml', xslt: 'xml', svg: 'xml', plist: 'xml',
-};
-
 const extOf = (name) => (name.includes('.') ? name.split('.').pop().toLowerCase() : '');
 
 const KINDS = { text: 'Text', code: 'Code', json: 'JSON', csv: 'CSV', xml: 'XML' };
@@ -34,9 +26,12 @@ function sniff(text) {
   return null;
 }
 
-/** What "Auto" picks: the file extension, else a guess from the content, else plain text or code. */
-function autoKind(ext, text) {
-  return KIND_BY_EXT[ext] ?? sniff(text) ?? (ext === '' ? 'text' : 'code');
+/**
+ * What "Auto" picks: the file extension (kindByExt, from app.js), else a guess from the content,
+ * else plain text or code.
+ */
+function autoKind(ext, text, kindByExt) {
+  return kindByExt[ext] ?? sniff(text) ?? (ext === '' ? 'text' : 'code');
 }
 
 // The user's "View as" choice is remembered per extension, so e.g. every .bdm file opens as XML.
@@ -54,11 +49,11 @@ const TEXT_LINES = 20000;
 /**
  * Renders a file ({ title, text }) with its viewer into container.
  * @param {{ store: { get(k: string, d: any): any, set(k: string, v: any): void },
- *           highlightCode: (root: Element) => void }} host
+ *           highlightCode: (root: Element) => void, kindByExt: Record<string, string> }} host
  */
 export function renderViewer(container, note, host) {
   const ext = extOf(note.title);
-  const auto = autoKind(ext, note.text);
+  const auto = autoKind(ext, note.text, host.kindByExt);
   const chosen = host.store.get(choiceKey(ext), null);
   const kind = KINDS[chosen] ? chosen : auto;
   const rerender = () => renderViewer(container, note, host);
