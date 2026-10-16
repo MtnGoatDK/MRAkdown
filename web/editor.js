@@ -44,7 +44,9 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft, wri
       alert('Save the file first (Ctrl+S), so the image can be stored next to it.');
       return null;
     }
-    const res = await fetch(`/__api/upload${query(note)}&name=${encodeURIComponent(name)}`, { method: 'POST', body: file });
+    // As bytes rather than the File itself: the macOS host's WKWebView may not pass a Blob body on to the host.
+    const body = await file.arrayBuffer();
+    const res = await fetch(`/__api/upload${query(note)}&name=${encodeURIComponent(name)}`, { method: 'POST', body });
     if (!res.ok) {
       alert(`Could not insert ${name}:\n${await res.text()}`);
       return null;

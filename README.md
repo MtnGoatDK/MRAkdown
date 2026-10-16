@@ -1,13 +1,14 @@
 # MRAkdown
 
-A lightweight Markdown viewer and editor for Windows and Linux. Double-click a `.md` file and it opens, with the folder
-around it in a sidebar: there's no vault to set up. It reads notes written for Obsidian, with their `[[wikilinks]]` and
-callouts.
+A lightweight Markdown viewer and editor for Windows and Linux, with an experimental macOS version. Double-click a
+`.md` file and it opens, with the folder around it in a sidebar: there's no vault to set up. It reads notes written for
+Obsidian, with their `[[wikilinks]]` and callouts.
 
 ![MRAkdown with a note on the left and a comparison with the last git commit on the right](assets/screenshot.png)
 
 MRAkdown is a personal project, shared as-is: there's no promise of support, fixes or new features. It runs on
-Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
+Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)). The macOS version is new and
+experimental (see [macOS](#macos-experimental)).
 
 ## Features
 
@@ -92,6 +93,28 @@ Differences from Windows:
   the pointer entering it, and new windows open where the desktop puts them.
 - If pages render blank or with glitches on NVIDIA graphics, try starting it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`.
 
+### macOS (experimental)
+
+The macOS version is new and has had little testing. Building it needs only the .NET 10 SDK (no Xcode), and the app
+includes .NET, so it runs without it. It builds for the processor of the Mac it's built on (Apple silicon or Intel).
+
+```sh
+packaging/macos/install.sh             # build MRAkdown.app and install it in ~/Applications
+packaging/macos/install.sh --uninstall # keeps your settings
+```
+
+To open Markdown files with it by double-clicking, select one in Finder, choose File > Get Info, pick MRAkdown under
+"Open with" and click "Change All…". From a terminal: `open -a MRAkdown [file or folder]`. To update, quit MRAkdown
+and run the install script again.
+
+Differences from Windows:
+
+- It has the standard macOS title bar and menu bar. Shortcuts use `⌘` where the table below says `Ctrl` (`Ctrl` works
+  too), and `⌘Q`, `⌘H` and `⌘M` quit, hide and minimize as usual.
+- Comparing with git commits needs git: Apple's (`xcode-select --install`) or Homebrew's.
+- The app is signed for your own Mac only ("ad hoc"). Copied to another Mac, macOS won't open it until it's allowed
+  under System Settings > Privacy & Security.
+
 ## Using it
 
 ### Panes and comparisons
@@ -111,8 +134,8 @@ links and search then cover the folders opened so far. Links to folders (symlink
 
 ### Keyboard shortcuts
 
-These are the defaults. All keys except `Ctrl+1…9` can be changed in Settings, under "Change shortcuts…" (the mouse
-buttons can't).
+These are the defaults (on a Mac, `⌘` works wherever it says `Ctrl`). All keys except `Ctrl+1…9` can be changed in
+Settings, under "Change shortcuts…" (the mouse buttons can't).
 
 | Keys | Action |
 |---|---|
@@ -137,20 +160,26 @@ Clicking a file or link opens it in the current tab. `Ctrl+click` or middle-clic
 ## Development
 
 The UI is a web page (`web/`) shown by a small native host: WinForms with WebView2 on Windows, and GTK 4 with
-libadwaita and WebKitGTK (through [Gir.Core](https://gircore.github.io/)) on Linux. Both are built with .NET 10.
+libadwaita and WebKitGTK (through [Gir.Core](https://gircore.github.io/)) on Linux, and AppKit with WKWebView on macOS
+(called through the Objective-C runtime, so no Xcode is needed). All are built with .NET 10.
 
 | Folder | What |
 |---|---|
 | `src/MRAkdown.Core` | Shared: indexing folders, rendering Markdown, wikilinks, file encodings, git history, and serving the page (`NoteServer`) |
 | `src/MRAkdown.Windows` | Windows host: a WinForms window with WebView2 |
 | `src/MRAkdown.Linux` | Linux host: a libadwaita window with WebKitGTK; the page is served under `mrakdown://notes/` |
-| `web/` | The page, shared by both hosts (embedded in Core) |
+| `src/MRAkdown.Mac` | macOS host: an AppKit window with WKWebView, also serving the page under `mrakdown://notes/` |
+| `web/` | The page, shared by all hosts (embedded in Core) |
 | `packaging/linux` | Desktop entry and per-user install script |
-| `assets/` | Windows app icon (made from `web/logo.svg` by `make-icon.ps1`, on Windows with Microsoft Edge) and the screenshot |
+| `packaging/macos` | `Info.plist` and the script that builds and installs `MRAkdown.app` |
+| `assets/` | App icons made from `web/logo.svg`: `MRAkdown.ico` by `make-icon.ps1` (on Windows, with Microsoft Edge), `MRAkdown.icns` by `make-icns.py` (with `rsvg-convert`); and the screenshot |
 
-- Run the Linux version from the repo with `dotnet run --project src/MRAkdown.Linux -- [file or folder]`.
-- `MRAKDOWN_DEVTOOLS=1` (Linux) enables Inspect Element in the page and prints its console messages.
-- `MRAKDOWN_INSTANCE=name` starts a separate instance, e.g. to test next to an installed copy that is in use.
+- Run the Linux version from the repo with `dotnet run --project src/MRAkdown.Linux -- [file or folder]`, and the
+  macOS version with `dotnet run --project src/MRAkdown.Mac -- [file or folder]`.
+- `MRAKDOWN_DEVTOOLS=1` enables Inspect Element in the page. On Linux it also prints the page's console messages; on
+  macOS (13.3 and later), inspect the page from Safari's Develop menu.
+- `MRAKDOWN_INSTANCE=name` (Windows and Linux) starts a separate instance, e.g. to test next to an installed copy that
+  is in use.
 
 ## License
 

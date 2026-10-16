@@ -1,6 +1,6 @@
 const $ = (sel) => document.querySelector(sel);
-// The host app: WebView2 on Windows; on Linux the WebKitGTK host posts to a script message handler
-// and answers through a "host-message" event (see MainWindow.cs in MRAkdown.Linux).
+// The host app: WebView2 on Windows; on Linux (WebKitGTK) and macOS (WKWebView) the page posts to a script message
+// handler and the host answers through a "host-message" event (see MainWindow.cs in MRAkdown.Linux and MRAkdown.Mac).
 const hostBridge = window.chrome?.webview ?? {
   postMessage: (msg) => window.webkit?.messageHandlers?.host?.postMessage(msg),
   addEventListener: (type, listener) => window.addEventListener('host-message', (e) => listener({ data: e.detail })),
@@ -1669,8 +1669,8 @@ function applyShortcutHints(root = document) {
 
 addEventListener('keydown', (e) => {
   if (e.defaultPrevented) return;
-  // Ctrl+1…8 go to that tab, Ctrl+9 to the last one.
-  if (e.ctrlKey && !e.altKey && /^[1-9]$/.test(e.key) && !e.getModifierState?.('AltGraph')) {
+  // Ctrl+1…8 go to that tab, Ctrl+9 to the last one (⌘ on a Mac, as with every shortcut).
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && /^[1-9]$/.test(e.key) && !e.getModifierState?.('AltGraph')) {
     e.preventDefault();
     jumpToTab(Number(e.key));
     return;
