@@ -8,8 +8,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>mrakdown</AssemblyName>
     <RootNamespace>MRAkdown</RootNamespace>
-    <!-- Precompile on publish (ReadyToRun) so less code is JIT-compiled at startup; needs a fixed runtime. -->
-    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+    <!-- Precompile on publish (ReadyToRun) so less code is JIT-compiled at startup; needs a fixed runtime: the processor
+         of the machine it's built on (linux-x64, linux-arm64, ...). -->
+    <RuntimeIdentifier>linux-$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
