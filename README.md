@@ -12,21 +12,26 @@ Windows first; the Linux version is newer and has only been tested on GNOME (Way
 
 - **Reading view in Obsidian style:** `[[wikilinks]]` (also to headings and with aliases), callouts, highlights, task
   lists, tables, footnotes, embedded images and syntax-highlighted code
-- **Folder sidebar with search.** Opening a file shows its nearest `.obsidian` or `.git` folder, or else its own
-  folder. Choose whether the sidebar lists Markdown files only, all files with a viewer, or all files.
-- **Read, Edit and Split** (live preview) modes, with a formatting toolbar and image paste and drop
+- **Folder sidebar** with search by file name and path. Opening a file shows its nearest `.obsidian` or `.git`
+  folder, or else its own folder. Choose whether the sidebar lists Markdown files only, also files with a viewer of
+  their own, or all files; hidden files and folders and `node_modules` are left out.
+- **Read, Edit and Split** (live preview) modes, with a formatting toolbar. Pasted or dropped images are saved in an
+  `attachments` folder next to the file.
 - **Tabs** with their own back/forward history; drag tabs to reorder them, into a new window, or onto another window
 - **Two panes side by side**, each with its own tabs and mode: "Open to the side" from a file, link or tab menu, or
-  drag a tab onto the right half of the window
+  drag a tab onto the right half of the page
 - **Compare files** side by side, with changed lines and words highlighted and unchanged stretches folded: two files,
   or a file with its last git commit or any earlier commit
-- **Other files open too**, with viewers for JSON, CSV/TSV, XML and plain text
-- **Keeps each file's encoding** (UTF-8, UTF-16, Windows-1252) and line endings when saving
-- **One running instance:** opening more files adds tabs to the open window
+- **Other files open too:** JSON, CSV/TSV and XML in viewers of their own; `.txt`, `.log` and files without an extension
+  as plain text; other text files as code ("View as" picks another viewer, remembered per file type)
+- **Keeps each file's encoding** (UTF-8, UTF-16, Windows-1252) and line endings (CRLF or LF) when saving. A
+  Windows-1252 file that gets characters it can't hold, such as emoji, is saved as UTF-8 instead.
+- **One running instance:** opening more files adds tabs to the window you used last
 - Follows the system's light or dark theme, with your choice of accent colour
 
-MRAkdown has no account and no telemetry; your files are only read and written on your own computer. Web links open in
-your browser, and images that a note embeds from the web load as they would in a browser.
+MRAkdown has no account and no telemetry of its own; your files are only read and written on your own computer. Web
+links open in your browser, and images that a note embeds from the web load as they would in a browser. (On Windows,
+the WebView2 runtime that shows the page follows Microsoft's own settings for diagnostic data.)
 
 ## Install
 
@@ -54,12 +59,13 @@ dotnet publish src\MRAkdown.Windows -c Release -r win-x64 --self-contained false
 
 ### Linux
 
-Needs GTK 4, libadwaita and WebKitGTK 6.0. On Arch and CachyOS: `sudo pacman -S dotnet-sdk gtk4 libadwaita webkitgtk-6.0`.
+Needs GTK 4, libadwaita and WebKitGTK 6.0 (tested with GTK 4.24, libadwaita 1.10 and WebKitGTK 2.54). On Arch and
+CachyOS: `sudo pacman -S dotnet-sdk gtk4 libadwaita webkitgtk-6.0`.
 
 ```sh
 packaging/linux/install.sh             # build and install for the current user (in ~/.local)
 packaging/linux/install.sh --default   # ...and make it the default app for Markdown files
-packaging/linux/install.sh --uninstall
+packaging/linux/install.sh --uninstall   # keeps your settings
 ```
 
 MRAkdown is then in the app menu, and `mrakdown [file or folder]` starts it from a terminal (if `~/.local/bin` is on
@@ -78,10 +84,12 @@ Differences from Windows:
 
 ### Panes and comparisons
 
-- **Open to the side:** right-click a file in the sidebar, a link or a tab. Drag a tab onto the other pane to move it
-  there; a pane closes with its last tab, and the divider between the panes can be dragged.
+- **Open to the side:** right-click a file in the sidebar, a link or a tab, or drag a tab onto the right half of the
+  page (when its pane has other tabs). Drag a tab onto the other pane to move it there; a pane closes with its last
+  tab, and the divider between the panes can be dragged (double-click it to reset).
 - **Compare two files:** right-click one and choose "Select for compare", then right-click the other and choose
-  "Compare with …". With two panes open, a tab's menu can also compare it with the file in the other pane.
+  "Compare with …". A file's menu in the sidebar can also compare it with the file open now, and with two panes open,
+  a tab's menu with the file in the other pane.
 - **Compare with git:** "Compare with last commit", or "Compare with commit…" to pick from the commits that changed the
   file (renames are followed).
 - Comparisons use the files as saved, and ignore differences in line endings alone.
@@ -97,8 +105,8 @@ links and search then cover the folders opened so far. Links to folders (symlink
 | `Ctrl+O` / `Ctrl+Shift+O` | Open file / open folder |
 | `Ctrl+S` | Save (asks where, for a new file) |
 | `Ctrl+E` / `Ctrl+Shift+E` | Toggle Edit / Split mode |
-| `Ctrl+P` | Search files |
-| `Ctrl+T`, `Ctrl+W`, `Ctrl+Shift+T` | New, close, reopen tab |
+| `Ctrl+P` | Search files (`Enter` opens the first match, `Esc` clears) |
+| `Ctrl+T` (or the + after the tabs), `Ctrl+W`, `Ctrl+Shift+T` | New, close, reopen tab |
 | `Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+PageDown`, `Ctrl+PageUp` | Next / previous tab |
 | `Ctrl+1…8`, `Ctrl+9` | Go to that tab, to the last tab |
 | `Alt+←` / `Alt+→`, mouse back / forward | Back / forward |
@@ -106,9 +114,10 @@ links and search then cover the folders opened so far. Links to folders (symlink
 | `F7` / `Shift+F7` | Next / previous change, in a comparison |
 | `Ctrl+\` | Show or hide the folder panel |
 | `Ctrl+Shift+W` | Close the window |
+| `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / italic / link, while editing a Markdown file |
 
 Clicking a file or link opens it in the current tab. `Ctrl+click` or middle-click opens it in a background tab,
-`Ctrl+Shift+click` in a new tab you switch to, and `Shift+click` in a new window.
+`Ctrl+Shift+click` in a new tab you switch to, and `Shift+click` in a new window. Middle-click a tab to close it.
 
 ## Development
 
@@ -122,7 +131,7 @@ libadwaita and WebKitGTK (through [Gir.Core](https://gircore.github.io/)) on Lin
 | `src/MRAkdown.Linux` | Linux host: a libadwaita window with WebKitGTK; the page is served under `mrakdown://notes/` |
 | `web/` | The page, shared by both hosts (embedded in Core) |
 | `packaging/linux` | Desktop entry and per-user install script |
-| `assets/` | App icon (generated from `web/logo.svg` with `make-icon.ps1`) and the screenshot |
+| `assets/` | Windows app icon (made from `web/logo.svg` by `make-icon.ps1`, on Windows with Microsoft Edge) and the screenshot |
 
 - Run the Linux version from the repo with `dotnet run --project src/MRAkdown.Linux -- [file or folder]`.
 - `MRAKDOWN_DEVTOOLS=1` (Linux) enables Inspect Element in the page and prints its console messages.
