@@ -221,9 +221,12 @@ function closeContextMenu() {
   contextMenu = null;
 }
 
-/** Shows a small menu at (x, y). items: [{ label, hint?, action }] */
+let lastMenuPoint = { x: 0, y: 0 }; // where the last menu opened, for a follow-up menu (e.g. the commit list)
+
+/** Shows a small menu at (x, y). items: [{ label, hint?, title?, disabled?, action }] */
 function showContextMenu(x, y, items) {
   closeContextMenu();
+  lastMenuPoint = { x, y };
   const menu = document.createElement('div');
   menu.className = 'context-menu';
   menu.setAttribute('role', 'menu');
@@ -235,6 +238,8 @@ function showContextMenu(x, y, items) {
     if (isChoice) btn.setAttribute('aria-checked', String(item.checked));
     const check = isChoice ? `<span class="menu-check">${item.checked ? '✓' : ''}</span>` : '';
     btn.innerHTML = `<span>${check}${esc(item.label)}</span>${item.hint ? `<kbd>${esc(item.hint)}</kbd>` : ''}`;
+    if (item.title) btn.title = item.title;
+    btn.disabled = Boolean(item.disabled);
     btn.onclick = () => {
       closeContextMenu();
       item.action();
@@ -255,7 +260,7 @@ function showContextMenu(x, y, items) {
   menu.style.left = `${Math.max(4, Math.min(x, innerWidth - width - 4))}px`;
   menu.style.top = `${Math.max(4, Math.min(y, innerHeight - height - 4))}px`;
   contextMenu = menu;
-  menu.querySelector('button').focus({ preventScroll: true });
+  (menu.querySelector('button:not(:disabled)') ?? menu.querySelector('button')).focus({ preventScroll: true });
 }
 
 addEventListener('pointerdown', (e) => {
@@ -1227,8 +1232,9 @@ function onContentLink(pane, e, middle) {
 
 /* ---------- Comparing files ---------- */
 
-// A comparison is a tab of its own: { diff: { left, right } }, each side { root, path, version: 'file' | 'head' }
-// ('head': the file as in git's last commit). diff.js shows the two side by side.
+// A comparison is a tab of its own: { diff: { left, right } }, each side { root, path, version } with version
+// 'file' (the file now), 'head' (as in git's last commit) or 'commit' (as in a given commit: the side also has
+// { commit, commitPath, short }, commitPath being its path in the repository then). diff.js shows the two side by side.
 let compareSelection = null; // { root, path } picked with "Select for compare"
 let diffModule = null;
 
@@ -1256,7 +1262,43 @@ function compareItems(root, path, otherTab) {
     label: 'Compare with last commit',
     action: () => openDiff({ root, path, version: 'head' }, { root, path, version: 'file' }),
   });
+  items.push({ label: 'Compare with commit…', action: () => pickCommit(root, path) });
   return items;
+}
+
+/** Lists the commits that changed a file (from git), to compare the file with one of them. */
+async function pickCommit(root, path) {
+  const { x, y } = lastMenuPoint;
+  showContextMenu(x, y, [{ label: 'Loading commits…', disabled: true }]);
+  const loading = contextMenu;
+  // Closed (clicked elsewhere) while loading: don't pop the list up after all.
+  const show = (items) => { if (contextMenu === loading) showContextMenu(x, y, items); };
+  let commits;
+  try {
+    const res = await fetch('/__api/git-log' + apiQuery(root, path));
+    if (!res.ok) {
+      show([{ label: (await res.text()) || 'Git couldn\'t list the commits.', disabled: true }]);
+      return;
+    }
+    commits = await res.json();
+  } catch (e) {
+    show([{ label: String(e), disabled: true }]);
+    return;
+  }
+  if (!commits.length) {
+    show([{ label: 'No commits with this file yet.', disabled: true }]);
+    return;
+  }
+  show(commits.map((c) => ({
+    label: `${c.short}  ${c.subject}`,
+    hint: c.date,
+    // The file may have had another name then (git follows renames).
+    title: `${c.subject}\n${c.author}, ${c.date}` + (fileName(c.path) !== fileName(path) ? `\nThen named ${c.path}` : ''),
+    action: () => openDiff(
+      { root, path, version: 'commit', commit: c.hash, commitPath: c.path, short: c.short },
+      { root, path, version: 'file' }),
+  })));
+  contextMenu?.classList.add('commit-menu');
 }
 
 /** Opens a comparison tab in the active pane. */
@@ -1268,24 +1310,31 @@ async function openDiff(left, right) {
   await activateTab(tab);
 }
 
+/** Which version a side is, in a word or two: "now", "last commit", or the commit's short hash. */
+const versionName = (side) => (side.version === 'head' ? 'last commit' : side.version === 'commit' ? side.short : 'now');
+
 function diffTitle({ left, right }) {
-  if (left.root === right.root && left.path === right.path) {
-    return `${fileName(right.path)} (${left.version === 'head' ? 'last commit' : 'now'} ↔ ${right.version === 'head' ? 'last commit' : 'now'})`;
-  }
+  if (left.root === right.root && left.path === right.path) return `${fileName(right.path)} (${versionName(left)} ↔ ${versionName(right)})`;
   return `${fileName(left.path)} ↔ ${fileName(right.path)}`;
 }
 
-/** A side of a comparison, for people: its folder and path, and "(last commit)" for git's version. */
+/** A side of a comparison, for people: its folder and path, and which commit for git's versions. */
 function sideLabel(side) {
-  return [rootNames.get(side.root), side.path].filter(Boolean).join(' / ') + (side.version === 'head' ? ' (last commit)' : '');
+  const where = [rootNames.get(side.root), side.path].filter(Boolean).join(' / ');
+  if (side.version === 'head') return `${where} (last commit)`;
+  if (side.version === 'commit') return `${where} (commit ${side.short})`;
+  return where;
 }
 const diffDescription = (diff) => `${sideLabel(diff.left)}  ↔  ${sideLabel(diff.right)}`;
 
 /** A side's text: { text }, or { error } with a message to show instead. */
 async function loadSide(side) {
-  const api = side.version === 'head' ? '/__api/git' : '/__api/source';
+  const api = side.version === 'file' ? '/__api/source' : '/__api/git';
+  const commit = side.version === 'commit'
+    ? `&commit=${encodeURIComponent(side.commit)}&path=${encodeURIComponent(side.commitPath)}`
+    : '';
   try {
-    const res = await fetch(api + apiQuery(side.root, side.path));
+    const res = await fetch(api + apiQuery(side.root, side.path) + commit);
     return res.ok ? { text: await res.text() } : { error: (await res.text()) || `Couldn't read ${side.path}` };
   } catch (e) {
     return { error: String(e) };

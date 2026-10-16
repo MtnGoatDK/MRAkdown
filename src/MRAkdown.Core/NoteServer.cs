@@ -35,7 +35,9 @@ static class NoteServer
                 return PageResponse.Json(await treeRoot.TreeJsonAsync(TreeFiles(query["files"])));
             }
             if (path == "/__api/git" && Roots.Find(query["r"]) is { } gitRoot)
-                return await GitVersion(gitRoot, query["n"] ?? "");
+                return await GitVersion(gitRoot, query["n"] ?? "", query["commit"], query["path"]);
+            if (path == "/__api/git-log" && Roots.Find(query["r"]) is { } logRoot)
+                return await GitLog(logRoot, query["n"] ?? "");
             if (path == "/")
                 return PageResponse.Ok(ReadResource("app.html"), "text/html");
             if (path.StartsWith("/__app/"))
@@ -82,13 +84,34 @@ static class NoteServer
         }
     }
 
-    /// <summary>A file as in git's last commit, for comparing; 409 with the reason if there is no such version.</summary>
-    static async Task<PageResponse> GitVersion(NoteIndex index, string note)
+    static readonly JsonSerializerOptions CamelCase = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    /// <summary>
+    /// A file as in git's last commit, or in the given commit where it had the given path in the repository (both from
+    /// /__api/git-log), for comparing; 409 with the reason if there is no such version.
+    /// </summary>
+    static async Task<PageResponse> GitVersion(NoteIndex index, string note, string? commit, string? repoPath)
     {
         if (index.FullPath(note) is not { } full || !File.Exists(full)) return PageResponse.NotFound;
         try
         {
-            return PageResponse.Text(await GitFiles.ReadHeadAsync(full));
+            return PageResponse.Text(commit is null || repoPath is null
+                ? await GitFiles.ReadHeadAsync(full)
+                : await GitFiles.ReadAtAsync(full, commit, repoPath));
+        }
+        catch (GitFiles.GitException ex)
+        {
+            return PageResponse.Text(ex.Message, 409);
+        }
+    }
+
+    /// <summary>The commits that changed a file, newest first, for picking one to compare with; 409 with the reason if none.</summary>
+    static async Task<PageResponse> GitLog(NoteIndex index, string note)
+    {
+        if (index.FullPath(note) is not { } full || !File.Exists(full)) return PageResponse.NotFound;
+        try
+        {
+            return PageResponse.Json(JsonSerializer.Serialize(await GitFiles.LogAsync(full), CamelCase));
         }
         catch (GitFiles.GitException ex)
         {

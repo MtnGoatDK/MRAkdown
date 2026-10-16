@@ -17,8 +17,9 @@ host: WinForms + WebView2 on Windows, GTK 4 + libadwaita + WebKitGTK (through [G
 - Tabs with per-tab history; drag tabs to reorder, into a new window, or onto another window
 - Two panes side by side, each with its own tabs and Read/Edit/Split mode: "Open to the side" (file, link or tab
   menu), or drag a tab onto the right half; drag tabs between panes
-- Compare two files, or a file with its last git commit, side by side: changed lines and words highlighted,
-  unchanged stretches folded (right-click a file or tab: "Select for compare", then "Compare with …")
+- Compare two files, or a file with its last git commit or any earlier one, side by side: changed lines and words
+  highlighted, unchanged stretches folded (right-click a file or tab: "Select for compare", then "Compare with …",
+  or "Compare with commit…" to pick from the commits that changed it)
 - One running instance: opening more files adds tabs to the open window
 - New files with Save As; any other file opens as text, with JSON, CSV/TSV, XML and text viewers
 - Keeps file encodings (UTF-8, UTF-16, Windows-1252) and line endings when saving
