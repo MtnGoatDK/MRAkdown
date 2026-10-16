@@ -184,7 +184,7 @@ function fileItem(n) {
       { label: 'Open to the side', action: () => openIn(root, n.path, 'side') },
       { label: 'Open in new tab', hint: 'Ctrl+click', action: () => openIn(root, n.path, 'background') },
       { label: 'Open in new window', hint: 'Shift+click', action: () => openIn(root, n.path, 'window') },
-      ...compareItems(root, n.path, activePane?.activeTab),
+      ...compareItems(root, n.path, activePane?.activeTab, 'open now'),
     ]);
   });
   return el;
@@ -555,7 +555,7 @@ function tabMenu(tab) {
   if (other || pane.tabs.length > 1) {
     items.push({ label: other ? 'Move to other pane' : 'Move to the side', action: () => moveTab(tab, ensureOtherPane(pane)) });
   }
-  if (isFile) items.push(...compareItems(tab.root, tab.path, other?.activeTab));
+  if (isFile) items.push(...compareItems(tab.root, tab.path, other?.activeTab, 'other pane'));
   items.push({ label: 'Close', hint: 'Ctrl+W', action: () => closeTab(tab) });
   return items;
 }
@@ -1244,8 +1244,11 @@ let diffModule = null;
 
 const fileName = (path) => path.slice(path.lastIndexOf('/') + 1);
 
-/** Menu items for comparing a file: with the one selected for compare, the other pane's file, or the last commit. */
-function compareItems(root, path, otherTab) {
+/**
+ * Menu items for comparing a file: with the one selected for compare, an open file (otherTab, described as
+ * otherWhere, e.g. "other pane"), the last commit or an earlier one.
+ */
+function compareItems(root, path, otherTab, otherWhere) {
   const items = [];
   const same = (a) => a && a.root === root && a.path === path;
   if (compareSelection && !same(compareSelection)) {
@@ -1257,7 +1260,7 @@ function compareItems(root, path, otherTab) {
   }
   if (otherTab?.path && !otherTab.draft && !otherTab.diff && !same(otherTab) && !same(compareSelection)) {
     items.push({
-      label: `Compare with “${fileName(otherTab.path)}” (other pane)`,
+      label: `Compare with “${fileName(otherTab.path)}” (${otherWhere})`,
       action: () => openDiff({ root: otherTab.root, path: otherTab.path, version: 'file' }, { root, path, version: 'file' }),
     });
   }

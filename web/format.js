@@ -241,8 +241,8 @@ export function createToolbar(ta, { uploadImage }) {
   }
   bar.append(picker);
 
-  // Markdown helpers only apply to .md files; other files are edited as plain text.
-  const isPlainFile = () => document.body.classList.contains('plain-file');
+  // Markdown helpers only apply to .md files; other files are edited as plain text (their pane says which).
+  const isPlainFile = () => ta.closest('.pane')?.classList.contains('plain-file') ?? false;
 
   ta.addEventListener('keydown', (e) => {
     if (!e.ctrlKey || e.altKey || e.shiftKey || isPlainFile()) return;
