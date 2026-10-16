@@ -34,6 +34,8 @@ static class NoteServer
                 await treeRoot.OpenFoldersAsync(query.GetValues("open") ?? []);
                 return PageResponse.Json(await treeRoot.TreeJsonAsync(TreeFiles(query["files"])));
             }
+            if (path == "/__api/git" && Roots.Find(query["r"]) is { } gitRoot)
+                return await GitVersion(gitRoot, query["n"] ?? "");
             if (path == "/")
                 return PageResponse.Ok(ReadResource("app.html"), "text/html");
             if (path.StartsWith("/__app/"))
@@ -77,6 +79,20 @@ static class NoteServer
         {
             index.Save(note, BodyText());
             return PageResponse.Text("");
+        }
+    }
+
+    /// <summary>A file as in git's last commit, for comparing; 409 with the reason if there is no such version.</summary>
+    static async Task<PageResponse> GitVersion(NoteIndex index, string note)
+    {
+        if (index.FullPath(note) is not { } full || !File.Exists(full)) return PageResponse.NotFound;
+        try
+        {
+            return PageResponse.Text(await GitFiles.ReadHeadAsync(full));
+        }
+        catch (GitFiles.GitException ex)
+        {
+            return PageResponse.Text(ex.Message, 409);
         }
     }
 

@@ -14,9 +14,9 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
   document.head.append(css);
 
   const pane = document.createElement('div');
-  pane.id = 'editor-pane';
+  pane.className = 'editor-pane';
   const ta = document.createElement('textarea');
-  ta.id = 'editor';
+  ta.className = 'editor';
   ta.spellcheck = false;
   ta.disabled = true;
   ta.placeholder = 'Open a file to edit it';
@@ -168,7 +168,7 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
   function setupSplitResizer(pane) {
     const main = pane.parentElement;
     const divider = document.createElement('div');
-    divider.id = 'split-resizer';
+    divider.className = 'split-resizer';
     divider.title = 'Drag to resize, double-click to reset';
     pane.after(divider);
 

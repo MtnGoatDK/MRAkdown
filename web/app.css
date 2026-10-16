@@ -121,12 +121,45 @@ body.side-hidden #sidebar, body.side-hidden #resizer { display: none; }
 
 /* Note */
 #main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
-#panes { flex: 1; min-height: 0; display: flex; position: relative; }
-#view { flex: 1; min-width: 0; overflow: auto; }
-body[data-mode="edit"] #view { display: none; }
+#panes { flex: 1; min-height: 0; display: flex; }
+
+/* A pane: its own tab bar and view (see "Panes" in app.js). There are one or two, side by side. */
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.pane-body { flex: 1; min-height: 0; display: flex; position: relative; }
+.view { flex: 1; min-width: 0; overflow: auto; }
+.pane[data-mode="edit"] .view { display: none; }
+
+/* Divider between two panes */
+.pane-resizer {
+  flex-shrink: 0;
+  width: 7px;
+  margin: 0 -3px;
+  z-index: 2;
+  background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat;
+  cursor: col-resize;
+}
+.pane-resizer:hover, .pane-resizer.dragging {
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-size: 3px 100%;
+}
+body:has(.pane-resizer.dragging) { cursor: col-resize; user-select: none; }
+body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
+/* With two panes, the active pane's tab is marked */
+.pane.focused .tab.active { box-shadow: inset 0 2px 0 var(--accent); }
+/* Where a dragged tab would go: another pane, or a new pane on the right half */
+.pane.drop-pane::after, .pane.drop-split::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+.pane.drop-split::after { left: 50%; }
 
 /* Tab bar: tabs on the left, view controls on the right */
-#tabbar {
+.tabbar {
   display: flex;
   align-items: flex-end;
   gap: 6px;
@@ -136,7 +169,7 @@ body[data-mode="edit"] #view { display: none; }
   border-bottom: 1px solid var(--border);
   background: var(--bg-side);
 }
-#tabs {
+.tabs {
   flex: 1;
   min-width: 0;
   height: 100%;
@@ -146,7 +179,7 @@ body[data-mode="edit"] #view { display: none; }
   overflow-x: auto;
   scrollbar-width: none;
 }
-#tabs::-webkit-scrollbar { display: none; }
+.tabs::-webkit-scrollbar { display: none; }
 .tab {
   display: flex;
   align-items: center;
@@ -197,13 +230,13 @@ body[data-mode="edit"] #view { display: none; }
   pointer-events: none;
 }
 
-#toolbar {
+.toolbar {
   display: flex;
   align-self: center;
   align-items: center;
   gap: 2px;
 }
-#toolbar button, #show-side {
+.toolbar button, #show-side {
   display: flex;
   padding: 5px;
   border: 0;
@@ -212,8 +245,8 @@ body[data-mode="edit"] #view { display: none; }
   color: var(--faint);
   cursor: pointer;
 }
-#toolbar button:hover, #show-side:hover { background: var(--hover); color: var(--text); }
-#toolbar button.active { background: var(--accent-soft); color: var(--accent); }
+.toolbar button:hover, #show-side:hover { background: var(--hover); color: var(--text); }
+.toolbar button.active { background: var(--accent-soft); color: var(--accent); }
 /* Right-click menu */
 .context-menu {
   position: fixed;
@@ -301,23 +334,23 @@ body[data-mode="edit"] #view { display: none; }
 }
 .window-controls button:hover { background: color-mix(in srgb, var(--text) 15%, transparent); color: var(--text); }
 .side-head .window-controls.left { margin-right: 8px; }
-#tabbar .window-controls.left { display: none; margin-right: 4px; }
-body.side-hidden #tabbar .window-controls.left { display: flex; }
-#tabbar .window-controls.right { margin-left: 6px; }
+.tabbar .window-controls.left { display: none; margin-right: 4px; }
+body.side-hidden .tabbar .window-controls.left { display: flex; }
+.tabbar .window-controls.right { margin-left: 6px; }
 
 #show-side { display: none; align-self: center; }
 body.side-hidden #show-side { display: flex; }
 /* Formatting toolbar toggle: only relevant while editing */
-#toolbar #format-toggle, #format-sep { display: none; }
-body:not([data-mode="read"]) #toolbar #format-toggle { display: flex; }
-body:not([data-mode="read"]) #format-sep { display: block; width: 1px; height: 16px; margin: 0 4px; background: var(--border); }
-body:not(.hide-format) #format-toggle { background: var(--accent-soft); color: var(--accent); }
+.toolbar .format-toggle, .format-sep { display: none; }
+.pane:not([data-mode="read"]) .toolbar .format-toggle { display: flex; }
+.pane:not([data-mode="read"]) .format-sep { display: block; width: 1px; height: 16px; margin: 0 4px; background: var(--border); }
+body:not(.hide-format) .format-toggle { background: var(--accent-soft); color: var(--accent); }
 /* Non-Markdown files: no formatting toggle (the toolbar itself is hidden in editor.css), wider monospaced view */
-body.plain-file #toolbar #format-toggle, body.plain-file #format-sep { display: none; }
-body.plain-file .markdown { max-width: 1100px; }
+.pane.plain-file .toolbar .format-toggle, .pane.plain-file .format-sep { display: none; }
+.pane.plain-file .markdown { max-width: 1100px; }
 .markdown pre.text-file { white-space: pre; font-size: 13px; line-height: 1.55; }
-#unsaved { display: none; width: 7px; height: 7px; margin: 0 6px; border-radius: 50%; background: var(--accent); }
-body.dirty #unsaved { display: block; }
+.unsaved { display: none; width: 7px; height: 7px; margin: 0 6px; border-radius: 50%; background: var(--accent); }
+.pane.dirty .unsaved { display: block; }
 .markdown { max-width: 760px; margin: 0 auto; padding: 36px 48px 160px; }
 .empty { margin-top: 30vh; text-align: center; color: var(--faint); }
 
