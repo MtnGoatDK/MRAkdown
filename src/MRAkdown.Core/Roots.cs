@@ -10,8 +10,10 @@ namespace MRAkdown;
 /// </summary>
 static class Roots
 {
+    // Create: without it, a missing folder (e.g. no ~/.local/share yet on a new Linux account) gives "", and the
+    // settings would land in whatever folder MRAkdown was started from.
     public static readonly string DataDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MRAkdown");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create), "MRAkdown");
     static readonly string LastRootFile = Path.Combine(DataDir, "last-folder.txt");
 
     static readonly Dictionary<string, NoteIndex> ById = new();
