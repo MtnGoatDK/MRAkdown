@@ -106,7 +106,7 @@ function renderTree() {
       if (dir) el.insertAdjacentHTML('beforeend', `<span class="match-dir">${esc(dir)}</span>`);
       nav.append(el);
     }
-    if (!matches.length) nav.innerHTML = '<div class="tree-empty">No matching notes</div>';
+    if (!matches.length) nav.innerHTML = `<div class="tree-empty">No matching files</div>`;
   } else {
     nav.append(...tree.children.map((n) => buildNode(n, root)));
     if (!tree.children.length) nav.innerHTML = '<div class="tree-empty">No Markdown files in this folder</div>';
@@ -609,7 +609,7 @@ async function openNote(path, { hash = '', history = 'push', keepScroll = false,
     tab.title = noteTitle(path);
     current = path;
     renderTabs();
-    $('#content').innerHTML = `<div class="empty">Note not found: ${esc(path)}</div>`;
+    $('#content').innerHTML = `<div class="empty">File not found: ${esc(path)}</div>`;
     markActive();
     if (editor) await editor.load(null);
     return;
@@ -648,7 +648,7 @@ async function openNote(path, { hash = '', history = 'push', keepScroll = false,
 function showEmpty() {
   current = null;
   document.body.classList.remove('plain-file');
-  $('#content').innerHTML = '<div class="empty">Select a note</div>';
+  $('#content').innerHTML = '<div class="empty">Select a file</div>';
   document.title = 'MRAkdown';
   markActive();
   editor?.load(null);

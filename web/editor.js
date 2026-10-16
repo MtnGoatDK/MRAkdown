@@ -19,7 +19,7 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
   ta.id = 'editor';
   ta.spellcheck = false;
   ta.disabled = true;
-  ta.placeholder = 'Open a note to edit it';
+  ta.placeholder = 'Open a file to edit it';
   pane.append(createToolbar(ta, { uploadImage }), ta);
   view.before(pane);
   setupSplitResizer(pane);
@@ -37,7 +37,7 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
   async function uploadImage(file, name) {
     if (note === null) return null;
     if (note.draft) {
-      alert('Save the note first (Ctrl+S), so the image can be stored next to it.');
+      alert('Save the file first (Ctrl+S), so the image can be stored next to it.');
       return null;
     }
     const res = await fetch(`/__api/upload${query(note)}&name=${encodeURIComponent(name)}`, { method: 'POST', body: file });

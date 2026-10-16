@@ -215,7 +215,7 @@ sealed class NoteIndex
 
         var noteDir = Path.GetDirectoryName(noteRel)?.Replace('\\', '/') ?? "";
         var dir = FullPath(noteDir.Length > 0 ? noteDir + "/attachments" : "attachments")
-            ?? throw new InvalidDataException("Invalid note path.");
+            ?? throw new InvalidDataException("Invalid file path.");
         Directory.CreateDirectory(dir);
 
         var stem = Path.GetFileNameWithoutExtension(name);

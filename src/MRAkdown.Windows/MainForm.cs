@@ -105,7 +105,7 @@ sealed class MainForm : Form
     {
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Choose a folder of Markdown notes",
+            Description = "Choose a folder",
             UseDescriptionForTitle = true,
             InitialDirectory = Roots.ReadLastRoot() ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         };
@@ -321,7 +321,7 @@ sealed class MainForm : Form
         var root = Roots.Find(rootId);
         using var dialog = new SaveFileDialog
         {
-            Title = "Save note",
+            Title = "Save file",
             Filter = "Markdown files (*.md)|*.md",
             DefaultExt = "md",
             AddExtension = true,
@@ -337,7 +337,7 @@ sealed class MainForm : Form
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            MessageBox.Show(this, $"Could not save the note.\n\n{ex.Message}", "MRAkdown",
+            MessageBox.Show(this, $"Could not save the file.\n\n{ex.Message}", "MRAkdown",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return null;
         }

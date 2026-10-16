@@ -1,6 +1,6 @@
 # MRAkdown
 
-A lightweight Markdown note viewer and editor for Windows, in the spirit of Obsidian but without vaults:
+A lightweight Markdown viewer and editor for Windows, in the spirit of Obsidian but without vaults:
 double-click a `.md` file and it opens, with the folder around it in a sidebar.
 
 Built with .NET 10 (WinForms), WebView2 and [Markdig](https://github.com/xoofx/markdig).
@@ -12,7 +12,7 @@ Built with .NET 10 (WinForms), WebView2 and [Markdig](https://github.com/xoofx/m
 - Read, Edit and Split (live preview) modes, with a formatting toolbar and image paste/drop
 - Tabs with per-tab history; drag tabs to reorder, into a new window, or onto another window
 - One running instance: opening more files adds tabs to the open window
-- New notes with Save As; any other file opens as text, with JSON, CSV/TSV, XML and text viewers
+- New files with Save As; any other file opens as text, with JSON, CSV/TSV, XML and text viewers
 - Keeps file encodings (UTF-8, UTF-16, Windows-1252) and line endings when saving
 - Follows the Windows light/dark theme; choose your own accent colour
 
@@ -44,11 +44,11 @@ The app icon is generated from `web/logo.svg` with `assets/make-icon.ps1`.
 
 | Keys | Action |
 |---|---|
-| `Ctrl+N` / `Ctrl+Shift+N` | New note / new window |
+| `Ctrl+N` / `Ctrl+Shift+N` | New file / new window |
 | `Ctrl+O` / `Ctrl+Shift+O` | Open file / open folder |
-| `Ctrl+S` | Save (asks where, for a new note) |
+| `Ctrl+S` | Save (asks where, for a new file) |
 | `Ctrl+E` / `Ctrl+Shift+E` | Toggle Edit / Split mode |
-| `Ctrl+P` | Search notes |
+| `Ctrl+P` | Search files |
 | `Ctrl+T`, `Ctrl+W`, `Ctrl+Shift+T` | New, close, reopen tab |
 | `Ctrl+Tab`, `Ctrl+1…9` | Switch tabs |
 | `Alt+←` / `Alt+→` | Back / forward |
