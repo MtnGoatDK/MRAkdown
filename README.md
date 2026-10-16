@@ -6,8 +6,8 @@ callouts.
 
 ![MRAkdown with a note on the left and a comparison with the last git commit on the right](assets/screenshot.png)
 
-MRAkdown is a personal project, shared as-is: there's no promise of support, fixes or new features. It was made for
-Windows first; the Linux version is newer and has only been tested on GNOME (Wayland).
+MRAkdown is a personal project, shared as-is: there's no promise of support, fixes or new features. It runs on
+Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 
 ## Features
 
@@ -18,6 +18,10 @@ Windows first; the Linux version is newer and has only been tested on GNOME (Way
   their own, or all files; hidden files and folders and `node_modules` are left out.
 - **Read, Edit and Split** (live preview) modes, with a formatting toolbar. Pasted or dropped images are saved in an
   `attachments` folder next to the file.
+- **Saves as you go:** edits are saved when you switch to another file, tab or mode and when you close the window, or
+  right away with `Ctrl+S`. A new file asks where to save it the first time, and asks before it's closed unsaved.
+- **Follows changes from other programs:** when a file you have open changes on disk (another editor, `git pull`),
+  it shows the new version, unless you have unsaved edits in it; the folder list updates too.
 - **Tabs** with their own back/forward history; drag tabs to reorder them, into a new window, or onto another window
 - **Two panes side by side**, each with its own tabs and mode: "Open to the side" from a file, link or tab menu, or
   drag a tab onto the right half of the page
@@ -52,7 +56,8 @@ dotnet publish src\MRAkdown.Windows -c Release -o publish
 This builds `publish\MRAkdown.exe`. To open Markdown files with it by double-clicking, choose it under "Open with" in
 Explorer.
 
-A single small `.exe` for sharing (without ReadyToRun, which crashes combined with single-file on installed .NET):
+A single small `.exe` for sharing (without ReadyToRun, which crashes combined with single-file on installed .NET); the
+computer it runs on needs the same .NET and WebView2 runtimes:
 
 ```powershell
 dotnet publish src\MRAkdown.Windows -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=false -p:DebugType=none -o share
@@ -60,13 +65,15 @@ dotnet publish src\MRAkdown.Windows -c Release -r win-x64 --self-contained false
 
 ### Linux
 
-Needs GTK 4, libadwaita and WebKitGTK 6.0 (tested with GTK 4.24, libadwaita 1.10 and WebKitGTK 2.54). On Arch and
-CachyOS: `sudo pacman -S dotnet-sdk gtk4 libadwaita webkitgtk-6.0`.
+Needs at least GTK 4.10, libadwaita 1.5 and WebKitGTK 2.40 (its 6.0 API): MRAkdown uses functions those versions
+added, so older releases of some distributions are too old. Tested with GTK 4.24, libadwaita 1.10 and WebKitGTK 2.54.
+On Arch and CachyOS: `sudo pacman -S dotnet-sdk gtk4 libadwaita webkitgtk-6.0`. It builds for the processor of the
+machine it's built on (x86-64 or ARM64).
 
 ```sh
 packaging/linux/install.sh             # build and install for the current user (in ~/.local)
 packaging/linux/install.sh --default   # ...and make it the default app for Markdown files
-packaging/linux/install.sh --uninstall   # keeps your settings
+packaging/linux/install.sh --uninstall # keeps your settings
 ```
 
 MRAkdown is then in the app menu, and `mrakdown [file or folder]` starts it from a terminal (if `~/.local/bin` is on
