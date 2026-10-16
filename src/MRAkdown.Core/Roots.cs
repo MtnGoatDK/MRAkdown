@@ -47,6 +47,24 @@ static class Roots
         return Get(dir);
     }
 
+    /// <summary>
+    /// First save of a new note, to the file the user chose: writes it and returns where it ended up
+    /// ({ root, rootName, path }) for the page. Throws IOException or UnauthorizedAccessException if it can't be written.
+    /// </summary>
+    /// <param name="root">The folder the note was created in; it stays there if saved inside it.</param>
+    public static object SaveNewNote(NoteIndex? root, string file, string text)
+    {
+        file = Path.GetFullPath(file);
+        if (!NoteIndex.IsMarkdown(file)) file += ".md";
+        File.WriteAllText(file, text, new UTF8Encoding(false));
+
+        // Keep it in the current folder if it was saved inside it; otherwise open its own folder.
+        var target = root is not null && file.StartsWith(root.Root + Path.DirectorySeparatorChar, NoteIndex.PathComparison)
+            ? root
+            : ForFile(file);
+        return new { root = target.Id, rootName = target.Name, path = target.Rel(file) };
+    }
+
     public static string? ReadLastRoot()
     {
         try
@@ -67,19 +85,24 @@ static class Roots
         catch (IOException) { }
     }
 
+    // Paths are case-insensitive on Windows only; on Linux, Notes and notes are different folders.
     static string IdFor(string fullPath) =>
-        Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(fullPath.ToLowerInvariant())))[..10];
+        Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(
+            OperatingSystem.IsWindows() ? fullPath.ToLowerInvariant() : fullPath)))[..10];
 
     static void Watch(NoteIndex index)
     {
         var ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Roots must be used on the UI thread");
-        var debounce = new System.Windows.Forms.Timer { Interval = 250 };
-        debounce.Tick += async (_, _) =>
+        // Rebuild once changes have settled for 250 ms; each change restarts the wait.
+        var generation = 0;
+        async void Debounce()
         {
-            debounce.Stop();
+            var mine = ++generation;
+            await Task.Delay(250);
+            if (mine != generation) return;
             await index.Rebuild();
             Changed?.Invoke(index);
-        };
+        }
 
         var watcher = new FileSystemWatcher(index.Root)
         {
@@ -89,8 +112,8 @@ static class Roots
         FileSystemEventHandler onChange = (_, e) =>
         {
             // Ignore churn inside .git, .obsidian etc.
-            if (Path.GetRelativePath(index.Root, e.FullPath).Split('\\').Any(s => s.StartsWith('.'))) return;
-            ui.Post(_ => { debounce.Stop(); debounce.Start(); }, null);
+            if (Path.GetRelativePath(index.Root, e.FullPath).Split('\\', '/').Any(s => s.StartsWith('.'))) return;
+            ui.Post(_ => Debounce(), null);
         };
         watcher.Changed += onChange;
         watcher.Created += onChange;

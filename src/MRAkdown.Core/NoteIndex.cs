@@ -30,6 +30,10 @@ sealed class NoteIndex
 
     public const string NoteDirKey = "noteDir";
 
+    /// <summary>How file system paths compare: ignoring case on Windows, exactly elsewhere.</summary>
+    public static readonly StringComparison PathComparison =
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
     static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -143,7 +147,7 @@ sealed class NoteIndex
     public string? FullPath(string rel)
     {
         var full = Path.GetFullPath(Path.Combine(Root, rel.TrimStart('/', '\\')));
-        return full.StartsWith(Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? full : null;
+        return full.StartsWith(Root + Path.DirectorySeparatorChar, PathComparison) ? full : null;
     }
 
     /// <summary>

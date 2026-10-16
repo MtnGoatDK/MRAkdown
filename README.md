@@ -16,10 +16,18 @@ Built with .NET 10 (WinForms), WebView2 and [Markdig](https://github.com/xoofx/m
 - Keeps file encodings (UTF-8, UTF-16, Windows-1252) and line endings when saving
 - Follows the Windows light/dark theme; choose your own accent colour
 
-## Build
+## Project layout
+
+| Folder | What |
+|---|---|
+| `src/MRAkdown.Core` | Note index, Markdown rendering, wikilinks, file encodings, and serving the page (`NoteServer`) |
+| `src/MRAkdown.Windows` | Windows host: WinForms window with WebView2 |
+| `web/` | The page itself (embedded in Core) |
+
+## Build on Windows
 
 ```powershell
-dotnet publish -c Release -o publish
+dotnet publish src\MRAkdown.Windows -c Release -o publish
 ```
 
 `publish\MRAkdown.exe` needs the .NET 10 Desktop Runtime and the WebView2 Runtime (built into Windows 11).
@@ -27,7 +35,7 @@ dotnet publish -c Release -o publish
 A single small exe for sharing (no ReadyToRun: it crashes combined with single-file on installed .NET):
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=false -p:DebugType=none -o share
+dotnet publish src\MRAkdown.Windows -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=false -p:DebugType=none -o share
 ```
 
 The app icon is generated from `web/logo.svg` with `assets/make-icon.ps1`.

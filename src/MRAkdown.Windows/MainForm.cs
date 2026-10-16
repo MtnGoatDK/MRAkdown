@@ -1,9 +1,7 @@
 ﻿using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using System.Web;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Win32;
@@ -154,88 +152,27 @@ sealed class MainForm : Form
 
     async void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
-        var uri = new Uri(e.Request.Uri);
-        var path = Uri.UnescapeDataString(uri.AbsolutePath);
-        var query = HttpUtility.ParseQueryString(uri.Query);
-
-        if (path == "/__api/tree" && Roots.Find(query["r"]) is { } treeRoot)
+        var request = e.Request;
+        var response = NoteServer.HandleAsync(request.Method, new Uri(request.Uri), () => ReadBody(request));
+        if (response.IsCompleted)
         {
-            // Deferred so the tree request can await the background folder scan without blocking anything else.
-            var deferral = e.GetDeferral();
-            try
-            {
-                e.Response = Respond(Encoding.UTF8.GetBytes(await treeRoot.TreeJsonAsync()), "application/json");
-            }
-            catch (Exception ex)
-            {
-                e.Response = Respond(Encoding.UTF8.GetBytes(ex.Message), "text/plain", 500);
-            }
-            finally
-            {
-                deferral.Complete();
-            }
+            e.Response = ToWebView(response.Result);
             return;
         }
 
+        // Deferred so the tree request can await the background folder scan without blocking anything else.
+        var deferral = e.GetDeferral();
         try
         {
-            if (path == "/")
-                e.Response = Respond(ReadResource("app.html"), "text/html");
-            else if (path.StartsWith("/__app/"))
-                e.Response = Respond(ReadResource(path["/__app/".Length..]), MimeType(path));
-            else if (path.StartsWith("/__api/") && Roots.Find(query["r"]) is { } root)
-                e.Response = HandleApi(path, root, query["n"] ?? "", e.Request);
-            else if (ResolveFileUrl(path) is { } full && File.Exists(full))
-                // Read into memory so we never hold a lock on the user's files.
-                e.Response = Respond(File.ReadAllBytes(full), MimeType(full));
-            else
-                e.Response = Respond([], "text/plain", 404);
+            e.Response = ToWebView(await response);
         }
-        catch (FileNotFoundException)
+        finally
         {
-            e.Response = Respond([], "text/plain", 404);
-        }
-        catch (Exception ex)
-        {
-            e.Response = Respond(Encoding.UTF8.GetBytes(ex.Message), "text/plain", 500);
+            deferral.Complete();
         }
     }
 
-    /// <summary>Maps /f/{root id}/{relative path} to a file on disk.</summary>
-    static string? ResolveFileUrl(string path)
-    {
-        if (!path.StartsWith("/f/")) return null;
-        var slash = path.IndexOf('/', 3);
-        if (slash < 0) return null;
-        return Roots.Find(path[3..slash])?.FullPath(path[(slash + 1)..]);
-    }
-
-    CoreWebView2WebResourceResponse HandleApi(string path, NoteIndex index, string note, CoreWebView2WebResourceRequest request)
-    {
-        var isPost = request.Method == "POST";
-        return (path, isPost) switch
-        {
-            ("/__api/note", false) => Json(index.RenderJson(note)),
-            ("/__api/source", false) => Respond(Encoding.UTF8.GetBytes(index.ReadSource(note)), "text/plain"),
-            ("/__api/render", true) => Json(index.RenderJson(note, ReadBody(request))),
-            ("/__api/save", true) => SaveNote(),
-            ("/__api/upload", true) => Json(JsonSerializer.Serialize(new
-            {
-                link = index.SaveAttachment(note, HttpUtility.ParseQueryString(new Uri(request.Uri).Query)["name"] ?? "image.png", ReadBodyBytes(request)),
-            })),
-            _ => Respond([], "text/plain", 404),
-        };
-
-        CoreWebView2WebResourceResponse Json(string json) => Respond(Encoding.UTF8.GetBytes(json), "application/json");
-
-        CoreWebView2WebResourceResponse SaveNote()
-        {
-            index.Save(note, ReadBody(request));
-            return Respond([], "text/plain");
-        }
-    }
-
-    static byte[] ReadBodyBytes(CoreWebView2WebResourceRequest request)
+    static byte[] ReadBody(CoreWebView2WebResourceRequest request)
     {
         if (request.Content is null) return [];
         using var ms = new MemoryStream();
@@ -243,43 +180,10 @@ sealed class MainForm : Form
         return ms.ToArray();
     }
 
-    static string ReadBody(CoreWebView2WebResourceRequest request)
-    {
-        if (request.Content is null) return "";
-        using var reader = new StreamReader(request.Content, Encoding.UTF8);
-        return reader.ReadToEnd();
-    }
-
-    CoreWebView2WebResourceResponse Respond(byte[] body, string contentType, int status = 200) =>
+    CoreWebView2WebResourceResponse ToWebView(PageResponse r) =>
         _web.CoreWebView2.Environment.CreateWebResourceResponse(
-            new MemoryStream(body), status, status == 200 ? "OK" : "Error",
-            $"Content-Type: {contentType}; charset=utf-8\r\nCache-Control: no-store");
-
-    static byte[] ReadResource(string name)
-    {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("web/" + name)
-            ?? throw new FileNotFoundException(name);
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        return ms.ToArray();
-    }
-
-    static string MimeType(string path) => Path.GetExtension(path).ToLowerInvariant() switch
-    {
-        ".html" => "text/html",
-        ".css" => "text/css",
-        ".js" => "text/javascript",
-        ".png" => "image/png",
-        ".jpg" or ".jpeg" => "image/jpeg",
-        ".gif" => "image/gif",
-        ".webp" => "image/webp",
-        ".svg" => "image/svg+xml",
-        ".bmp" => "image/bmp",
-        ".avif" => "image/avif",
-        ".pdf" => "application/pdf",
-        ".md" or ".markdown" or ".txt" => "text/plain",
-        _ => "application/octet-stream",
-    };
+            new MemoryStream(r.Body), r.Status, r.Status == 200 ? "OK" : "Error",
+            $"Content-Type: {r.ContentType}; charset=utf-8\r\nCache-Control: no-store");
 
     /* ---------- Messages from the page ---------- */
 
@@ -427,11 +331,9 @@ sealed class MainForm : Form
         };
         if (dialog.ShowDialog(this) != DialogResult.OK) return null;
 
-        var file = Path.GetFullPath(dialog.FileName);
-        if (!NoteIndex.IsMarkdown(file)) file += ".md";
         try
         {
-            File.WriteAllText(file, text, new UTF8Encoding(false));
+            return Roots.SaveNewNote(root, dialog.FileName, text);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -439,12 +341,6 @@ sealed class MainForm : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return null;
         }
-
-        // Keep it in the current folder if it was saved inside it; otherwise open its own folder.
-        var target = root is not null && file.StartsWith(root.Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            ? root
-            : Roots.ForFile(file);
-        return new { root = target.Id, rootName = target.Name, path = target.Rel(file) };
     }
 
     static void OpenExternal(string url)

@@ -4,12 +4,14 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Lets the solution build (as a compile check) on Linux too; the app itself only runs on Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>MRAkdown</AssemblyName>
     <RootNamespace>MRAkdown</RootNamespace>
-    <ApplicationIcon>assets\MRAkdown.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\assets\MRAkdown.ico</ApplicationIcon>
     <!-- Precompile on publish (ReadyToRun) so less code is JIT-compiled at startup; needs a fixed runtime. -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
@@ -17,11 +19,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="web\**" LogicalName="web/%(Filename)%(Extension)" />
+    <ProjectReference Include="..\MRAkdown.Core\MRAkdown.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Markdig" Version="1.4.1" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
   </ItemGroup>
 
