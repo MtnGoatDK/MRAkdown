@@ -18,8 +18,11 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
   their own, or all files; hidden files and folders and `node_modules` are left out.
 - **Read, Edit and Split** (live preview) modes, with a formatting toolbar. Pasted or dropped images are saved in an
   `attachments` folder next to the file.
-- **Saves as you go:** edits are saved when you switch to another file, tab or mode and when you close the window, or
-  right away with `Ctrl+S`. A new file asks where to save it the first time, and asks before it's closed unsaved.
+- **Saving when you choose:** a tab keeps its unsaved edits (marked with a dot) until you save them with `Ctrl+S`,
+  also while you look at other tabs. You're asked Save / Don't save / Cancel before they'd be lost: closing the tab or
+  window, or opening another file in it. Turn on "Save automatically" in Settings to have edits saved whenever you
+  switch to another file, tab or mode instead. A new file asks where to save it the first time. If a file was changed
+  on disk since you opened it, you're asked before your version overwrites it.
 - **Follows changes from other programs:** when a file you have open changes on disk (another editor, `git pull`),
   it shows the new version, unless you have unsaved edits in it; the folder list updates too.
 - **Tabs** with their own back/forward history; drag tabs to reorder them, into a new window, or onto another window
@@ -32,7 +35,8 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 - **Keeps each file's encoding** (UTF-8, UTF-16, Windows-1252) and line endings (CRLF or LF) when saving. A
   Windows-1252 file that gets characters it can't hold, such as emoji, is saved as UTF-8 instead.
 - **One running instance:** opening more files adds tabs to the window you used last
-- Follows the system's light or dark theme, with your choice of accent colour
+- **Settings** (the gear button): accent colour, automatic saving, and keyboard shortcuts
+- Follows the system's light or dark theme
 
 MRAkdown has no account and no telemetry of its own; your files are only read and written on your own computer. Web
 links open in your browser, and images that a note embeds from the web load as they would in a browser. (On Windows,
@@ -106,6 +110,9 @@ A very large folder (over 50,000 files and folders, such as a home folder) is sc
 links and search then cover the folders opened so far. Links to folders (symlinks, junctions) aren't followed.
 
 ### Keyboard shortcuts
+
+These are the defaults. All keys except `Ctrl+1…9` can be changed in Settings, under "Change shortcuts…" (the mouse
+buttons can't).
 
 | Keys | Action |
 |---|---|

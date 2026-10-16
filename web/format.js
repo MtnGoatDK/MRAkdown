@@ -43,7 +43,7 @@ const IMAGE_TYPES = /^image\/(png|jpe?g|gif|webp|svg\+xml|bmp|avif)$/;
  * @param {{ uploadImage: (file: File, name: string) => Promise<string|null> }} host
  *   uploadImage saves an image next to the note and resolves to its relative link (or null on failure).
  */
-export function createToolbar(ta, { uploadImage }) {
+export function createToolbar(ta, { uploadImage, shortcut, hint }) {
   /** Replaces the selection, keeping it in the undo history. */
   function replaceSelection(text) {
     if (text) document.execCommand('insertText', false, text);
@@ -195,11 +195,11 @@ export function createToolbar(ta, { uploadImage }) {
     ['redo', 'Redo (Ctrl+Y)', () => document.execCommand('redo')],
     ['clear', 'Clear formatting', clearFormatting],
     null,
-    ['bold', 'Bold (Ctrl+B)', () => wrap('**', '**', 'bold text')],
-    ['italic', 'Italic (Ctrl+I)', () => wrap('*', '*', 'italic text')],
+    ['bold', 'Bold', () => wrap('**', '**', 'bold text')],
+    ['italic', 'Italic', () => wrap('*', '*', 'italic text')],
     ['strike', 'Strikethrough', () => wrap('~~', '~~', 'text')],
     ['code', 'Inline code', () => wrap('`', '`', 'code')],
-    ['link', 'Link (Ctrl+K)', () => link()],
+    ['link', 'Link', () => link()],
     ['image', 'Image link', () => link('!')],
     ['imageFile', 'Insert image from file (or paste / drop one)', () => picker.click()],
     null,
@@ -229,6 +229,12 @@ export function createToolbar(ta, { uploadImage }) {
     btn.title = title;
     btn.setAttribute('aria-label', title);
     btn.dataset.action = name;
+    // Bold, italic and link have shortcuts that can be changed: their tooltips follow (see applyShortcutHints in app.js).
+    if (['bold', 'italic', 'link'].includes(name)) {
+      btn.dataset.shortcut = name;
+      btn.dataset.hint = `${title} ({keys})`;
+      if (hint?.(name)) btn.title = `${title} (${hint(name)})`;
+    }
     btn.innerHTML = ICONS[name] ?? `<span class="md-text">${name}</span>`;
     // Keep focus and selection in the editor while clicking.
     btn.addEventListener('mousedown', (e) => e.preventDefault());
@@ -245,9 +251,8 @@ export function createToolbar(ta, { uploadImage }) {
   const isPlainFile = () => ta.closest('.pane')?.classList.contains('plain-file') ?? false;
 
   ta.addEventListener('keydown', (e) => {
-    if (!e.ctrlKey || e.altKey || e.shiftKey || isPlainFile()) return;
-    const key = e.key.toLowerCase();
-    const run = { b: () => wrap('**', '**', 'bold text'), i: () => wrap('*', '*', 'italic text'), k: () => link() }[key];
+    if (isPlainFile()) return;
+    const run = { bold: () => wrap('**', '**', 'bold text'), italic: () => wrap('*', '*', 'italic text'), link: () => link() }[shortcut?.(e)];
     if (!run) return;
     e.preventDefault();
     run();

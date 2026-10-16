@@ -355,7 +355,7 @@ const allTabs = () => panes.flatMap((p) => p.tabs);
 let paneSplit = store.get('paneSplit', 0.5); // the left pane's share of the width, with two panes
 // The window's own buttons, which layoutPanes puts in the tab bars (kept here: a pane that closes takes its DOM with it).
 const showSideButton = $('#show-side');
-const accentButton = $('#accent-button');
+const settingsButton = $('#settings-button');
 const paneResizer = document.createElement('div');
 paneResizer.className = 'pane-resizer';
 paneResizer.title = 'Drag to resize, double-click to reset';
@@ -410,6 +410,7 @@ function createPane(index = panes.length) {
     ]);
   });
 
+  applyShortcutHints(el);
   layoutPanes();
   return pane;
 }
@@ -436,12 +437,12 @@ function layoutPanes() {
   panes[0].el.style.flex = panes.length > 1 ? `0 0 ${paneSplit * 100}%` : '';
   for (const p of panes) p.el.classList.toggle('focused', panes.length > 1 && p === activePane);
 
-  // Show folder panel (and, on Linux, the left window buttons) at the far left; the accent colour button and the
-  // right window buttons at the far right.
+  // Show folder panel (and, on Linux, the left window buttons) at the far left; the Settings button and the right
+  // window buttons at the far right.
   const firstBar = panes[0].tabbarEl;
   firstBar.prepend(showSideButton);
   if (windowButtons.left) firstBar.prepend(windowButtons.left);
-  panes.at(-1).el.querySelector('.unsaved').after(accentButton);
+  panes.at(-1).el.querySelector('.unsaved').after(settingsButton);
   if (windowButtons.right) panes.at(-1).tabbarEl.append(windowButtons.right);
 }
 
@@ -517,6 +518,7 @@ function renderTabs(pane) {
     el.classList.toggle('active', tab === pane.activeTab);
     el.setAttribute('aria-selected', String(tab === pane.activeTab));
     el.querySelector('.tab-title').textContent = tab.title || 'New tab';
+    el.classList.toggle('has-edits', Boolean(tab.pending) || (tab === pane.activeTab && pane.el.classList.contains('dirty')));
     el.title = tab.diff ? diffDescription(tab.diff) : [rootNames.get(tab.root), tab.path].filter(Boolean).join(' / ');
     if (pane.tabsEl.children[i] !== el) pane.tabsEl.insertBefore(el, pane.tabsEl.children[i] ?? null);
   });
@@ -530,10 +532,11 @@ function tabElement(tab) {
   el.className = 'tab';
   el.setAttribute('role', 'tab');
   el.innerHTML = `<span class="tab-title"></span>
-    <button class="tab-close" title="Close (Ctrl+W)" aria-label="Close tab">
+    <button class="tab-close" data-shortcut="closeTab" data-hint="Close ({keys})" aria-label="Close tab">
       <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>`;
   el._tab = tab;
+  applyShortcutHints(el);
   el.querySelector('.tab-close').onclick = (e) => { e.stopPropagation(); closeTab(tab); };
   el.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); }); // no autoscroll
   el.addEventListener('auxclick', (e) => { if (e.button === 1) closeTab(tab); });
@@ -556,7 +559,7 @@ function tabMenu(tab) {
     items.push({ label: other ? 'Move to other pane' : 'Move to the side', action: () => moveTab(tab, ensureOtherPane(pane)) });
   }
   if (isFile) items.push(...compareItems(tab.root, tab.path, other?.activeTab, 'other pane'));
-  items.push({ label: 'Close', hint: 'Ctrl+W', action: () => closeTab(tab) });
+  items.push({ label: 'Close', hint: shortcutHint('closeTab'), action: () => closeTab(tab) });
   return items;
 }
 
@@ -579,7 +582,7 @@ async function leaveTab(pane) {
   const tab = pane.activeTab;
   if (!tab) return true;
   if (tab.draft) tab.draftText = pane.editor?.text() ?? tab.draftText;
-  else if (pane.editor && !tab.diff && !(await pane.editor.save())) return false;
+  else if (pane.editor && !tab.diff && !(await keepOrSave(pane, tab))) return false;
   tab.scroll = pane.viewEl.scrollTop;
   return true;
 }
@@ -687,6 +690,119 @@ async function confirmCloseDraft(tab) {
   return pane.editor.save({ explicit: true });
 }
 
+/* ---------- Saving ---------- */
+
+// Unsaved edits stay in their tab until you save them (Ctrl+S) or they'd be lost or leave the window: closing the tab
+// or window, another file in the tab, moving it to another window; then you're asked Save / Don't save / Cancel. While
+// its pane's editor has another file or none, a tab keeps them as { pending }, and shows a dot. With "Save
+// automatically" turned on in Settings, a file's edits are saved instead whenever you leave it: another tab, file or
+// mode, or closing.
+let autoSave = store.get('autoSave', false);
+
+const fileRef = (tab) => ({ root: tab.root, path: tab.path });
+
+/**
+ * Writes a file's text. edits: { text, saved, crlf }, saved being the text the file had when it was opened or last
+ * saved. If it has changed on disk since (another program, or the same file saved from the other pane), asks before
+ * overwriting it. Resolves false if the file wasn't saved.
+ */
+async function writeFile(file, { text, saved, crlf }) {
+  const query = apiQuery(file.root, file.path);
+  const onDisk = await fetch('/__api/source' + query);
+  if (onDisk.ok && (await onDisk.text()).replace(/\r\n/g, '\n') !== saved) {
+    const overwrite = await callHost('confirm', {
+      title: 'File changed on disk',
+      message: `“${fileName(file.path)}” was changed since you opened it, by another program or in another tab. Save your version over it?`,
+      yes: '_Save Anyway',
+    });
+    if (!overwrite) return false;
+  }
+  const res = await fetch('/__api/save' + query, { method: 'POST', body: crlf ? text.replace(/\n/g, '\r\n') : text });
+  if (!res.ok) {
+    alert(`Could not save ${file.path}:\n${await res.text()}`);
+    return false;
+  }
+  return true;
+}
+
+/** A file tab's unsaved edits, in its pane's editor or kept in the tab; null if it has none. */
+function unsavedEdits(tab) {
+  if (!tab.path || tab.draft || tab.diff) return null;
+  const pane = paneOf(tab);
+  return (tab === pane?.activeTab ? pane.editor?.snapshot(fileRef(tab)) : null) ?? tab.pending ?? null;
+}
+
+/** Saves a file tab's unsaved edits. Resolves false if they weren't saved. */
+async function saveTab(tab) {
+  const pane = paneOf(tab);
+  if (tab === pane?.activeTab && pane.editor?.snapshot(fileRef(tab))) return pane.editor.save();
+  if (!tab.pending) return true;
+  if (!(await writeFile(tab, tab.pending))) return false;
+  delete tab.pending;
+  if (pane) {
+    if (tab === pane.activeTab) setDirty(pane, false);
+    renderTabs(pane);
+  }
+  reportDirty();
+  return true;
+}
+
+/** Ctrl+S: saves the active tab (a new note asks where). */
+function saveActiveTab() {
+  const pane = activePane;
+  const tab = pane.activeTab;
+  if (tab?.draft) pane.editor?.save({ explicit: true });
+  else if (tab && !tab.diff) saveTab(tab);
+}
+
+/** Drops a file tab's unsaved edits: it shows the file as on disk again. */
+async function discardEdits(tab) {
+  delete tab.pending;
+  const pane = paneOf(tab);
+  if (pane && tab === pane.activeTab) {
+    if (pane.editor?.snapshot(fileRef(tab))) await pane.editor.load(null);
+    setDirty(pane, false);
+    renderTabs(pane);
+  }
+  reportDirty();
+}
+
+/** Leaving a file tab's file in the editor (another tab or mode): saves its edits, or keeps them in the tab. */
+async function keepOrSave(pane, tab) {
+  if (tab.diff || !tab.path) return true;
+  if (autoSave) return pane.editor.save();
+  const edits = pane.editor.snapshot(fileRef(tab));
+  if (edits) {
+    tab.pending = edits;
+    // The tab has them now; the editor lets go of its copy, so another tab showing the same file doesn't pick them up.
+    await pane.editor.load(null);
+  }
+  return true;
+}
+
+/**
+ * Before a tab's unsaved edits would be lost or leave the window (closing it, another file in it, moving it to another
+ * window): saves them, or when not saving automatically asks Save / Don't save / Cancel. Resolves false to stop.
+ */
+async function settleUnsaved(tab) {
+  if (!unsavedEdits(tab)) return true;
+  if (autoSave) return saveTab(tab);
+  const pane = paneOf(tab);
+  if (pane && tab !== pane.activeTab) await activateTab(tab); // show it while asking
+  const answer = await callHost('askSave', { title: tab.title });
+  if (answer === 'cancel') return false;
+  if (answer === 'yes') return saveTab(tab);
+  await discardEdits(tab);
+  return true;
+}
+
+/** Turns "Save automatically" on or off; turning it on saves all unsaved edits (in editors and kept in tabs). */
+async function setAutoSave(on) {
+  autoSave = on;
+  store.set('autoSave', on);
+  if (on) for (const tab of allTabs().filter((t) => unsavedEdits(t))) await saveTab(tab);
+}
+
 /* ---------- Requests to the host ---------- */
 
 const hostCalls = new Map(); // request id -> resolve
@@ -705,7 +821,7 @@ function callHost(type, data = {}) {
 let reportedDirty = false;
 function reportDirty() {
   const dirty = panes.some((p) => p.el.classList.contains('dirty')
-    || p.tabs.some((t) => t.draft && t !== p.activeTab && t.draftText?.trim()));
+    || p.tabs.some((t) => t.pending || (t.draft && t !== p.activeTab && t.draftText?.trim())));
   if (dirty === reportedDirty) return;
   reportedDirty = dirty;
   post({ type: 'dirty', value: dirty });
@@ -804,7 +920,7 @@ async function closeTab(tab, { remember = true } = {}) {
   if (!pane) return;
   if (tab.draft) {
     if (!(await confirmCloseDraft(tab))) return;
-  } else if (tab === pane.activeTab && pane.editor && !tab.diff && !(await pane.editor.save())) {
+  } else if (!(await settleUnsaved(tab))) {
     return;
   }
   const i = pane.tabs.indexOf(tab);
@@ -929,8 +1045,8 @@ let nextDragId = 1;
  * the window's last tab only moves onto another window (which merges the two). The host then answers whether it moved.
  */
 async function dragOut(tab, screenX, screenY) {
+  if (!(await settleUnsaved(tab))) return;
   const pane = paneOf(tab);
-  if (tab === pane.activeTab && pane.editor && !(await pane.editor.save())) return;
   const id = nextDragId++;
   pendingDrags.set(id, tab);
   const scroll = tab === pane.activeTab ? pane.viewEl.scrollTop : tab.scroll;
@@ -977,10 +1093,15 @@ async function openNote(pane, path, { hash = '', history = 'push', keepScroll = 
   if (!pane.activeTab || pane.activeTab.draft || pane.activeTab.diff) {
     return openInNewTab(pane.activeTab?.root ?? currentRoot, path, { pane });
   }
-  // Leaving a note (or reloading it) with unsaved edits: save them first.
-  if (pane.editor && !(await pane.editor.save())) return;
-
   const tab = pane.activeTab;
+  // Showing another file in this tab: its unsaved edits are saved first, or asked about (see "Saving"). The same file
+  // again (a reload): saved first if saving automatically, else kept and shown.
+  if (path !== tab.path) {
+    if (!(await settleUnsaved(tab))) return;
+  } else if (autoSave && pane.editor && !(await pane.editor.save())) {
+    return;
+  }
+
   const view = pane.viewEl;
   const previousScroll = view.scrollTop;
   const res = await fetch('/__api/note' + apiQuery(tab.root, path));
@@ -997,7 +1118,13 @@ async function openNote(pane, path, { hash = '', history = 'push', keepScroll = 
     return;
   }
 
-  const note = await res.json();
+  let note = await res.json();
+  // Unsaved edits kept in the tab: Read mode shows them rather than the file on disk.
+  if (tab.pending && pane.mode === 'read') {
+    const rendered = await fetch('/__api/render' + apiQuery(tab.root, note.path), { method: 'POST', body: tab.pending.text });
+    if (tab !== pane.activeTab) return;
+    if (rendered.ok) note = await rendered.json();
+  }
   if (history === 'push' && tab.path && tab.path !== note.path) {
     tab.back.push({ path: tab.path, scroll: previousScroll });
     tab.forward = [];
@@ -1018,7 +1145,15 @@ async function openNote(pane, path, { hash = '', history = 'push', keepScroll = 
   else if (hash) scrollToHeading(pane, decodeURIComponent(hash.slice(1)));
   else view.scrollTop = 0;
 
-  if (pane.editor && pane.mode !== 'read') await pane.editor.load({ root: tab.root, path: note.path });
+  if (pane.editor && pane.mode !== 'read') {
+    // The editor takes over any unsaved edits the tab kept; edits it already has for this file stay as they are.
+    const file = { root: tab.root, path: note.path };
+    if (!pane.editor.snapshot(file)) await pane.editor.load(file, tab.pending ?? null);
+    delete tab.pending;
+    pane.editor.renderPreview();
+  } else {
+    setDirty(pane, Boolean(tab.pending));
+  }
 
   // Rendered before the folder scan finished: re-render once it has, so links to other folders resolve.
   if (!note.indexed) {
@@ -1096,13 +1231,16 @@ async function setViewMode(pane, mode) {
       setDirty: (dirty) => setDirty(pane, dirty),
       getMode: () => pane.mode,
       saveDraft: (text) => saveDraftAs(pane, text),
+      write: writeFile,
+      shortcut: (e) => actionFor(e, 'editor')?.id ?? null,
+      hint: shortcutHint,
     });
   }
   const editor = pane.editor;
   const tab = pane.activeTab;
   const leavingEdit = pane.mode !== 'read' && mode === 'read';
   if (leavingEdit && tab?.draft) tab.draftText = editor.text();
-  else if (leavingEdit && !(await editor.save())) return;
+  else if (leavingEdit && tab && !(await keepOrSave(pane, tab))) return;
 
   pane.mode = mode;
   pane.el.dataset.mode = mode;
@@ -1115,7 +1253,9 @@ async function setViewMode(pane, mode) {
     if (tab?.draft) renderDraft(pane, tab);
     else if (pane.current) openNote(pane, pane.current, { history: 'none', keepScroll: true });
   } else {
-    await editor.load(tab?.draft ? draftRef(tab) : pane.current && tab ? { root: tab.root, path: pane.current } : null);
+    await editor.load(tab?.draft ? draftRef(tab) : pane.current && tab ? { root: tab.root, path: pane.current } : null,
+      tab?.draft ? null : tab?.pending ?? null);
+    if (tab) delete tab.pending;
     editor.renderPreview();
     editor.focus();
   }
@@ -1124,6 +1264,7 @@ async function setViewMode(pane, mode) {
 function setDirty(pane, dirty) {
   if (pane.el.classList.contains('dirty') === dirty) return;
   pane.el.classList.toggle('dirty', dirty);
+  renderTabs(pane);
   if (pane === activePane) updateTitle();
   reportDirty();
 }
@@ -1369,6 +1510,7 @@ async function showDiff(pane, tab, { keepScroll = false } = {}) {
       showDiff(pane, tab);
     },
     isCurrent: () => pane.activeTab === tab,
+    hint: shortcutHint,
   });
   pane.viewEl.scrollTop = scroll;
 }
@@ -1417,36 +1559,126 @@ async function reloadCurrent() {
   else openNote(pane, pane.current, { history: 'none', keepScroll: true });
 }
 
-// Shortcuts follow common browser conventions where one exists.
+/* ---------- Keyboard shortcuts ---------- */
+
+// Every shortcut is an action with default keys, following common browser conventions where one exists; the keys can
+// be changed in Settings (shortcuts.js). Keys are written like "Ctrl+Shift+E": Ctrl, Alt and Shift in that order, then
+// the key (a letter in capitals, or a key name such as "Tab", "PageDown", "F5" or "ArrowLeft"). Editor actions only
+// apply while editing a Markdown file (see format.js). Ctrl+1…8 and Ctrl+9 (go to that tab, the last tab) are fixed.
+const ACTIONS = [
+  { id: 'newFile', group: 'Files', label: 'New file', keys: ['Ctrl+N'], run: () => newNote() },
+  { id: 'openFile', group: 'Files', label: 'Open file', keys: ['Ctrl+O'], run: () => openFile() },
+  { id: 'openFolder', group: 'Files', label: 'Open folder', keys: ['Ctrl+Shift+O'], run: () => openFolder() },
+  { id: 'save', group: 'Files', label: 'Save', keys: ['Ctrl+S'], run: () => saveActiveTab() },
+  { id: 'reload', group: 'Files', label: 'Reload the file and folder', keys: ['F5', 'Ctrl+R'], run: () => reloadCurrent() },
+  { id: 'search', group: 'Files', label: 'Search files', keys: ['Ctrl+P'], run: () => { filter.focus(); filter.select(); } },
+  { id: 'newTab', group: 'Tabs and windows', label: 'New tab', keys: ['Ctrl+T'], run: () => newEmptyTab() },
+  {
+    id: 'closeTab', group: 'Tabs and windows', label: 'Close tab', keys: ['Ctrl+W'],
+    run: () => { if (activePane.activeTab) closeTab(activePane.activeTab); },
+  },
+  { id: 'reopenTab', group: 'Tabs and windows', label: 'Reopen closed tab', keys: ['Ctrl+Shift+T'], run: () => reopenClosedTab() },
+  { id: 'nextTab', group: 'Tabs and windows', label: 'Next tab', keys: ['Ctrl+Tab', 'Ctrl+PageDown'], run: () => cycleTab(1) },
+  { id: 'previousTab', group: 'Tabs and windows', label: 'Previous tab', keys: ['Ctrl+Shift+Tab', 'Ctrl+PageUp'], run: () => cycleTab(-1) },
+  { id: 'back', group: 'Tabs and windows', label: 'Back', keys: ['Alt+ArrowLeft'], run: () => goBack() },
+  { id: 'forward', group: 'Tabs and windows', label: 'Forward', keys: ['Alt+ArrowRight'], run: () => goForward() },
+  {
+    id: 'newWindow', group: 'Tabs and windows', label: 'New window', keys: ['Ctrl+Shift+N'],
+    run: () => { if (currentRoot) post({ type: 'openWindow', root: currentRoot, path: null }); },
+  },
+  { id: 'closeWindow', group: 'Tabs and windows', label: 'Close window', keys: ['Ctrl+Shift+W'], run: () => post({ type: 'closeWindow' }) },
+  {
+    id: 'toggleEdit', group: 'View', label: 'Edit mode on or off', keys: ['Ctrl+E'],
+    run: () => setViewMode(activePane, activePane.mode !== 'read' ? 'read' : 'edit'),
+  },
+  {
+    id: 'toggleSplit', group: 'View', label: 'Split mode on or off', keys: ['Ctrl+Shift+E'],
+    run: () => setViewMode(activePane, activePane.mode !== 'read' ? 'read' : 'split'),
+  },
+  { id: 'toggleSidebar', group: 'View', label: 'Show or hide the folder panel', keys: ['Ctrl+\\'], run: () => toggleSidebar() },
+  {
+    id: 'nextChange', group: 'View', label: 'Next change, in a comparison', keys: ['F7'],
+    when: () => activePane.activeTab?.diff && diffModule, run: () => diffModule.goToChange(activePane.contentEl, 1),
+  },
+  {
+    id: 'previousChange', group: 'View', label: 'Previous change, in a comparison', keys: ['Shift+F7'],
+    when: () => activePane.activeTab?.diff && diffModule, run: () => diffModule.goToChange(activePane.contentEl, -1),
+  },
+  { id: 'bold', group: 'Editing Markdown', label: 'Bold', keys: ['Ctrl+B'], scope: 'editor' },
+  { id: 'italic', group: 'Editing Markdown', label: 'Italic', keys: ['Ctrl+I'], scope: 'editor' },
+  { id: 'link', group: 'Editing Markdown', label: 'Link', keys: ['Ctrl+K'], scope: 'editor' },
+];
+
+/** Each action's keys: the defaults, except where changed in Settings (stored as { action id: keys }). */
+function loadShortcuts() {
+  const changed = store.get('shortcuts', {});
+  return Object.fromEntries(ACTIONS.map((a) => [a.id, Array.isArray(changed[a.id]) ? changed[a.id] : a.keys]));
+}
+let shortcuts = loadShortcuts();
+
+/** Uses and remembers new keys ({ action id: keys }); only those that differ from the defaults are stored. */
+function setShortcuts(next) {
+  shortcuts = next;
+  store.set('shortcuts', Object.fromEntries(ACTIONS
+    .filter((a) => next[a.id].join() !== a.keys.join())
+    .map((a) => [a.id, next[a.id]])));
+  applyShortcutHints();
+}
+
+/**
+ * A key press written as shortcut keys ("Ctrl+Shift+E"), or null for a modifier key on its own. AltGr (which Windows
+ * reports as Ctrl+Alt) doesn't count as a modifier, so typing characters with it never triggers a shortcut.
+ */
+function keysOf(e) {
+  if (['Control', 'Shift', 'Alt', 'Meta', 'AltGraph', 'CapsLock', 'Dead', 'Unidentified'].includes(e.key)) return null;
+  const altGraph = e.getModifierState?.('AltGraph');
+  const parts = [];
+  if ((e.ctrlKey || e.metaKey) && !altGraph) parts.push('Ctrl');
+  if (e.altKey && !altGraph) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  parts.push(e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key);
+  return parts.join('+');
+}
+
+/** The action a key press runs in a scope ('window' or 'editor'), if any. */
+function actionFor(e, scope) {
+  const keys = keysOf(e);
+  return keys ? ACTIONS.find((a) => (a.scope ?? 'window') === scope && shortcuts[a.id].includes(keys)) ?? null : null;
+}
+
+/** Keys as people read them: "Alt+←", "Page Down". */
+const describeKeys = (keys) => keys
+  .replace('ArrowLeft', '←').replace('ArrowRight', '→').replace('ArrowUp', '↑').replace('ArrowDown', '↓')
+  .replace('PageDown', 'Page Down').replace('PageUp', 'Page Up');
+
+/** An action's first keys for tooltips and menus ("Ctrl+W"), or '' if it has none. */
+const shortcutHint = (id) => (shortcuts[id]?.[0] ? describeKeys(shortcuts[id][0]) : '');
+
+/**
+ * Tooltips and placeholders that mention a shortcut: elements with data-shortcut (an action id) and data-hint, a text
+ * with {keys} where the keys go ("New file ({keys})"); without keys the bracketed part is left out.
+ */
+function applyShortcutHints(root = document) {
+  for (const el of root.querySelectorAll('[data-shortcut]')) {
+    const keys = shortcutHint(el.dataset.shortcut);
+    const text = keys ? el.dataset.hint.replace('{keys}', keys) : el.dataset.hint.replace(/\s*\([^)]*\{keys\}[^)]*\)/, '');
+    if (el.tagName === 'INPUT') el.placeholder = text;
+    else el.title = text;
+  }
+}
+
 addEventListener('keydown', (e) => {
-  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); goBack(); return; }
-  if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); goForward(); return; }
-  if (e.key === 'F5') { e.preventDefault(); reloadCurrent(); return; }
-  // F7 / Shift+F7: next / previous change in a comparison.
-  if (e.key === 'F7' && activePane.activeTab?.diff && diffModule) {
+  if (e.defaultPrevented) return;
+  // Ctrl+1…8 go to that tab, Ctrl+9 to the last one.
+  if (e.ctrlKey && !e.altKey && /^[1-9]$/.test(e.key) && !e.getModifierState?.('AltGraph')) {
     e.preventDefault();
-    diffModule.goToChange(activePane.contentEl, e.shiftKey ? -1 : 1);
+    jumpToTab(Number(e.key));
     return;
   }
-  if (!e.ctrlKey) return;
-  const key = e.key.toLowerCase();
-  if (key === 'p') { e.preventDefault(); filter.focus(); filter.select(); }
-  else if (key === 'o') { e.preventDefault(); e.shiftKey ? openFolder() : openFile(); }
-  else if (key === 's') { e.preventDefault(); activePane.editor?.save({ explicit: true }); }
-  else if (key === 'r') { e.preventDefault(); reloadCurrent(); }
-  else if (key === 't') { e.preventDefault(); e.shiftKey ? reopenClosedTab() : newEmptyTab(); }
-  else if (key === 'n' && !e.shiftKey) { e.preventDefault(); newNote(); }
-  else if (key === 'n') { e.preventDefault(); if (currentRoot) post({ type: 'openWindow', root: currentRoot, path: null }); }
-  else if (key === 'w') { e.preventDefault(); if (e.shiftKey) post({ type: 'closeWindow' }); else if (activePane.activeTab) closeTab(activePane.activeTab); }
-  else if (key === 'tab') { e.preventDefault(); cycleTab(e.shiftKey ? -1 : 1); }
-  else if (key === 'pagedown') { e.preventDefault(); cycleTab(1); }
-  else if (key === 'pageup') { e.preventDefault(); cycleTab(-1); }
-  else if (/^[1-9]$/.test(key)) { e.preventDefault(); jumpToTab(Number(key)); }
-  else if (key === 'e') {
-    e.preventDefault();
-    setViewMode(activePane, activePane.mode !== 'read' ? 'read' : e.shiftKey ? 'split' : 'edit');
-  }
-  else if (key === '\\') { e.preventDefault(); toggleSidebar(); }
+  const action = actionFor(e, 'window');
+  if (!action || (action.when && !action.when())) return;
+  e.preventDefault();
+  action.run();
 });
 
 // Mouse back/forward buttons
@@ -1481,21 +1713,22 @@ function applyAccent(accent) {
   store.set('accent', accent);
 }
 
-let accentPanel = null;
+let settingsPanel = null;
 
-function closeAccentPanel() {
-  accentPanel?.remove();
-  accentPanel = null;
+function closeSettingsPanel() {
+  settingsPanel?.remove();
+  settingsPanel = null;
 }
 
-function toggleAccentPanel() {
-  if (accentPanel) { closeAccentPanel(); return; }
+/** The Settings panel: accent colour, saving, keyboard shortcuts. */
+function toggleSettingsPanel() {
+  if (settingsPanel) { closeSettingsPanel(); return; }
 
   const saved = store.get('accent', null);
   const panel = document.createElement('div');
   panel.id = 'settings';
   panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-label', 'Accent colour');
+  panel.setAttribute('aria-label', 'Settings');
   panel.innerHTML = `
     <div class="settings-title">Accent colour</div>
     <div class="swatches">
@@ -1503,7 +1736,17 @@ function toggleAccentPanel() {
         style="--c-light:${a.light};--c-dark:${a.dark}"></button>`).join('')}
       <label class="swatch custom" title="Custom colour"><input type="color" aria-label="Custom colour"></label>
     </div>
-    <button class="settings-reset">Reset to default</button>`;
+    <button class="settings-reset">Reset to default</button>
+    <div class="settings-title settings-section">Saving</div>
+    <div class="settings-row">
+      <label class="settings-check"><input type="checkbox" class="auto-save"> Save automatically</label>
+      <button class="settings-help" aria-label="About saving" aria-describedby="auto-save-help">?</button>
+      <div class="settings-help-text" id="auto-save-help" role="tooltip">On: edits are saved whenever you switch to
+        another file, tab or mode. Off: a tab keeps its unsaved edits until you save them${shortcutHint('save') ? ` (${shortcutHint('save')})` : ''},
+        and you're asked before they'd be lost.</div>
+    </div>
+    <div class="settings-title settings-section">Keyboard shortcuts</div>
+    <button class="settings-button change-shortcuts">Change shortcuts…</button>`;
 
   const swatches = [...panel.querySelectorAll('.swatch')];
   const customInput = panel.querySelector('input[type="color"]');
@@ -1533,17 +1776,25 @@ function toggleAccentPanel() {
     applyAccent(null);
     markActive(null);
   };
+  const autoSaveBox = panel.querySelector('.auto-save');
+  autoSaveBox.checked = autoSave;
+  autoSaveBox.onchange = () => setAutoSave(autoSaveBox.checked);
+  panel.querySelector('.change-shortcuts').onclick = async () => {
+    closeSettingsPanel();
+    const { openShortcutsDialog } = await import('/__app/shortcuts.js');
+    openShortcutsDialog({ actions: ACTIONS, shortcuts, keysOf, describeKeys, setShortcuts });
+  };
 
   $('#main').append(panel);
-  accentPanel = panel;
+  settingsPanel = panel;
 }
 
-$('#accent-button').onclick = toggleAccentPanel;
+settingsButton.onclick = toggleSettingsPanel;
 addEventListener('pointerdown', (e) => {
-  if (accentPanel && !accentPanel.contains(e.target) && !$('#accent-button').contains(e.target)) closeAccentPanel();
+  if (settingsPanel && !settingsPanel.contains(e.target) && !settingsButton.contains(e.target)) closeSettingsPanel();
 });
 addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeAccentPanel();
+  if (e.key === 'Escape') closeSettingsPanel();
 });
 
 function setFormatToolbar(visible) {
@@ -1639,8 +1890,8 @@ hostBridge.addEventListener('message', async (e) => {
           return;
         }
       }
-      for (const pane of panes) {
-        if (pane.editor && !pane.activeTab?.diff && !(await pane.editor.save())) {
+      for (const tab of allTabs().filter((t) => !t.draft && !t.diff)) {
+        if (!(await settleUnsaved(tab))) {
           post({ type: 'closeCancelled' });
           return;
         }
@@ -1719,6 +1970,7 @@ resizer.addEventListener('pointerdown', (e) => {
   setSideWidth(store.get('sideWidth', 260));
   document.body.classList.toggle('side-hidden', store.get('sidebarHidden', false));
   setFormatToolbar(!store.get('formatHidden', false));
+  applyShortcutHints();
 
   try {
     const params = new URLSearchParams(location.search);

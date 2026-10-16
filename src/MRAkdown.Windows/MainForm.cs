@@ -243,6 +243,11 @@ sealed class MainForm : Form
                     _ => "cancel",
                 });
                 break;
+            case "confirm":
+                // A yes/no question from the page (e.g. overwrite a file that changed on disk); the answer is true for yes.
+                Reply(m, MessageBox.Show(this, Str("message"), Str("title") ?? "MRAkdown",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes);
+                break;
             case "closeCancelled":
                 // The user chose Cancel when asked to save a new note while closing.
                 _closeRequested = false;

@@ -239,6 +239,16 @@ sealed class MainWindow
                 Reply(id, answer);
                 break;
             }
+            case "confirm":
+            {
+                // A yes/no question from the page (e.g. overwrite a file that changed on disk); the answer is true for yes.
+                var id = m.GetProperty("id").GetInt32();
+                var answer = await AskAsync(Str("title") ?? "MRAkdown", Str("message") ?? "", "no",
+                    ("no", "_Cancel", Adw.ResponseAppearance.Default),
+                    ("yes", Str("yes") ?? "_OK", Adw.ResponseAppearance.Destructive));
+                Reply(id, answer == "yes");
+                break;
+            }
             case "closeCancelled":
                 // The user chose Cancel when asked to save a new note while closing.
                 _closeRequested = false;

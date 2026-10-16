@@ -7,6 +7,8 @@ css.href = '/__app/diff.css';
 document.head.append(css);
 
 const esc = (s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+/** A button's tooltip with its shortcut keys, if it has any: "Next change (F7)". */
+const withKeys = (label, keys) => esc(keys ? `${label} (${keys})` : label);
 
 // Unchanged lines kept around each change when the rest are folded away.
 const CONTEXT = 3;
@@ -216,7 +218,8 @@ function wordDiff(before, after) {
  * @param {{ left: object, right: object }} sides
  * @param {{ store: { get(k: string, d: any): any, set(k: string, v: any): void },
  *           load: (side: object) => Promise<{ text?: string, error?: string }>,
- *           label: (side: object) => string, swap: () => void, isCurrent: () => boolean }} host
+ *           label: (side: object) => string, swap: () => void, isCurrent: () => boolean,
+ *           hint?: (action: string) => string }} host
  */
 export async function renderDiff(container, sides, host) {
   container.classList.add('diff-wide');
@@ -255,8 +258,8 @@ export async function renderDiff(container, sides, host) {
     <div class="diff-bar">
       <span class="diff-summary">${summary}</span>
       <span class="diff-actions">
-        ${changes ? `<button data-action="prev" title="Previous change (Shift+F7)">↑ Previous</button>
-        <button data-action="next" title="Next change (F7)">↓ Next</button>
+        ${changes ? `<button data-action="prev" title="${withKeys('Previous change', host.hint?.('previousChange'))}">↑ Previous</button>
+        <button data-action="next" title="${withKeys('Next change', host.hint?.('nextChange'))}">↓ Next</button>
         <button data-action="all" class="${showAll ? 'active' : ''}" title="Show the unchanged lines too">Unchanged lines</button>` : ''}
         <button data-action="swap" title="Swap left and right">⇄ Swap</button>
       </span>

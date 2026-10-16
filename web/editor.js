@@ -4,10 +4,14 @@ import { createToolbar } from '/__app/format.js';
 /**
  * @param {{ view: HTMLElement, showNote: (note: object) => void,
  *           setDirty: (dirty: boolean) => void, getMode: () => string,
- *           saveDraft: (text: string) => Promise<{ root: string, path: string } | null> }} host
+ *           saveDraft: (text: string) => Promise<{ root: string, path: string } | null>,
+ *           write: (file: { root: string, path: string }, edits: { text: string, saved: string, crlf: boolean }) => Promise<boolean> }} host
  *   saveDraft asks where to save a new note and writes it; resolves to the saved note, or null if cancelled.
+ *   write saves a file's text (see writeFile in app.js); resolves false if it wasn't saved.
+ *   shortcut(keydown event) names the editor action its keys are set to ('bold', 'italic', 'link') or null, and
+ *   hint(action) gives its keys for tooltips (see "Keyboard shortcuts" in app.js).
  */
-export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
+export function createEditor({ view, showNote, setDirty, getMode, saveDraft, write, shortcut, hint }) {
   const css = document.createElement('link');
   css.rel = 'stylesheet';
   css.href = '/__app/editor.css';
@@ -20,7 +24,7 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
   ta.spellcheck = false;
   ta.disabled = true;
   ta.placeholder = 'Open a file to edit it';
-  pane.append(createToolbar(ta, { uploadImage }), ta);
+  pane.append(createToolbar(ta, { uploadImage, shortcut, hint }), ta);
   view.before(pane);
   setupSplitResizer(pane);
 
@@ -52,9 +56,21 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
 
   /**
    * Loads a note's source ({ root, path }), a new note ({ root, draft: true, text }) or nothing (null).
-   * Keeps caret and scroll when the text on disk is unchanged.
+   * Keeps caret and scroll when the text on disk is unchanged. edits: unsaved edits kept for the file while it wasn't
+   * in the editor (from snapshot), shown instead of the text on disk.
    */
-  async function load(n) {
+  async function load(n, edits = null) {
+    if (n !== null && !n.draft && edits) {
+      note = n;
+      saved = edits.saved;
+      crlf = edits.crlf;
+      ta.disabled = false;
+      ta.value = edits.text;
+      ta.setSelectionRange(edits.selectionStart ?? 0, edits.selectionEnd ?? 0);
+      ta.scrollTop = edits.scrollTop ?? 0;
+      setDirty(isDirty());
+      return;
+    }
     if (n === null) {
       note = null;
       saved = ta.value = '';
@@ -119,14 +135,7 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
     if (!isDirty()) return true;
     const target = note;
     const text = ta.value;
-    const res = await fetch('/__api/save' + query(target), {
-      method: 'POST',
-      body: crlf ? text.replace(/\n/g, '\r\n') : text,
-    });
-    if (!res.ok) {
-      alert(`Could not save ${target.path}:\n${await res.text()}`);
-      return false;
-    }
+    if (!(await write(target, { text, saved, crlf }))) return false;
     if (sameAs(target)) {
       saved = text;
       setDirty(isDirty());
@@ -209,6 +218,15 @@ export function createEditor({ view, showNote, setDirty, getMode, saveDraft }) {
     load,
     save,
     renderPreview,
+    /** True while the editor has unsaved edits. */
+    isDirty,
+    /**
+     * The unsaved edits for a file ({ root, path }), to keep while the file isn't in the editor (see load), or null
+     * if the editor doesn't have that file or it has no unsaved edits.
+     */
+    snapshot: (file) => (sameAs(file) && isDirty()
+      ? { text: ta.value, saved, crlf, selectionStart: ta.selectionStart, selectionEnd: ta.selectionEnd, scrollTop: ta.scrollTop }
+      : null),
     /** Picks up changes made to the file outside the editor, unless there are unsaved edits. */
     refresh: () => (isDirty() || note === null || note.draft ? Promise.resolve() : load(note)),
     focus: () => ta.focus(),

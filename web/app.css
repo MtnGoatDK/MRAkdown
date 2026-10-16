@@ -208,6 +208,8 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   background: var(--bg);
   color: var(--text);
 }
+/* Unsaved edits in a tab: a dot after its title (not .unsaved: that's the toolbar's dot) */
+.tab.has-edits .tab-title::after { content: " •"; color: var(--accent); }
 .tab-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-close {
   display: flex;
@@ -305,7 +307,7 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   top: 44px;
   right: 12px;
   z-index: 6;
-  width: 232px;
+  width: 290px;
   padding: 12px 14px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -340,6 +342,53 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   cursor: pointer;
 }
 .settings-reset:hover { color: var(--text); text-decoration: underline; }
+.settings-section { margin-top: 16px; }
+.settings-check { display: flex; align-items: center; gap: 8px; color: var(--text); cursor: pointer; }
+.settings-check input { margin: 0; accent-color: var(--accent); }
+.settings-button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.settings-button:hover { border-color: var(--faint); }
+/* A setting with a ? that explains it, on hover or focus (click) */
+.settings-row { position: relative; display: flex; align-items: center; gap: 8px; }
+.settings-help {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  color: var(--faint);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  cursor: help;
+}
+.settings-help:hover, .settings-help:focus-visible { border-color: var(--faint); color: var(--text); }
+.settings-help-text {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.settings-help:hover + .settings-help-text, .settings-help:focus + .settings-help-text { display: block; }
 
 /* "Show folder panel" sits at the left of the tab bar, only while the panel is hidden */
 /* Window buttons, on Linux where the page's top bar is the title bar (see hostWindowControls in app.js) */
