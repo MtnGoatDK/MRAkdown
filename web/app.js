@@ -82,7 +82,9 @@ function loadTree(root) {
 
 async function fetchTree(root) {
   const show = treeShow;
-  const res = await fetch('/__api/tree' + apiQuery(root) + treeFilesQuery());
+  // The expanded folders: for a very large folder the host only scans those (see NoteIndex.IsPartial).
+  const open = [...expandedFor(root)].map((dir) => '&open=' + encodeURIComponent(dir)).join('');
+  const res = await fetch('/__api/tree' + apiQuery(root) + treeFilesQuery() + open);
   if (!res.ok) return null;
   const tree = await res.json();
   // The choice of files changed while this was loading; the newer request fills in the tree.
@@ -265,6 +267,8 @@ addEventListener('keydown', (e) => {
 addEventListener('blur', closeContextMenu);
 addEventListener('wheel', closeContextMenu, { passive: true });
 
+const scanRequests = new Set(); // "root/folder" being scanned for the tree, so each is only asked for once
+
 function buildNode(n, root) {
   if (!n.children) return fileItem(n);
 
@@ -274,9 +278,20 @@ function buildNode(n, root) {
   el.innerHTML = `<svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg><span>${esc(n.name)}</span>`;
   const children = document.createElement('div');
   children.className = 'tree-children';
-  // Build a folder's contents only once it is opened, so huge folders render quickly.
+  // Build a folder's contents only once it is opened, so huge folders render quickly. In a very large folder the
+  // host hasn't scanned an unopened folder yet (n.unscanned): ask for the tree again, now with this folder open.
   const fill = () => {
-    if (!children.hasChildNodes()) children.append(...n.children.map((c) => buildNode(c, root)));
+    if (children.hasChildNodes()) return;
+    if (!n.unscanned) {
+      children.append(...n.children.map((c) => buildNode(c, root)));
+    } else {
+      children.innerHTML = '<div class="tree-empty">Loading…</div>';
+      const key = `${root}/${n.path}`;
+      if (!scanRequests.has(key)) {
+        scanRequests.add(key);
+        loadTree(root).finally(() => scanRequests.delete(key));
+      }
+    }
   };
   if (expanded.has(n.path)) fill();
 

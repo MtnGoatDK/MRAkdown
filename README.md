@@ -10,7 +10,9 @@ host: WinForms + WebView2 on Windows, GTK 4 + libadwaita + WebKitGTK (through [G
 
 - Obsidian-style reading view: `[[wikilinks]]`, callouts, highlights, task lists, tables, embedded images
 - Folder sidebar with search; the nearest `.obsidian` or `.git` folder is used as the root. Choose whether it lists
-  Markdown files only, all files with a viewer, or all files.
+  Markdown files only, all files with a viewer, or all files. A very large folder (over 50,000 files and folders, such
+  as a home folder) is scanned as you open its subfolders; links and search then cover the folders opened so far.
+  Links to folders (symlinks, junctions) aren't followed.
 - Read, Edit and Split (live preview) modes, with a formatting toolbar and image paste/drop
 - Tabs with per-tab history; drag tabs to reorder, into a new window, or onto another window
 - One running instance: opening more files adds tabs to the open window

@@ -11,15 +11,21 @@ namespace MRAkdown;
 /// Indexes the Markdown files under a root folder and renders notes to HTML,
 /// resolving [[wikilinks]] and relative links against that root.
 /// The folder scan runs in the background so a note can be shown before it finishes.
+/// A very large folder (such as a home folder) is scanned partly: only its top level and the folders opened in the
+/// page (see <see cref="IsPartial"/>).
 /// </summary>
 sealed class NoteIndex
 {
-    public record Node(string Name, string Path, List<Node>? Children);
+    /// <param name="Children">A folder's contents; null for a file.</param>
+    /// <param name="Unscanned">A folder in a partial index whose contents haven't been scanned yet.</param>
+    public record Node(string Name, string Path, List<Node>? Children, bool? Unscanned = null);
 
     /// <summary>Result of one folder scan. Immutable once built, so it can be swapped in atomically.</summary>
     sealed class Snapshot
     {
         public Node Tree = new("", "", []);
+        // Only some folders were scanned (see IsPartial).
+        public bool Partial;
         // Note name (no extension) -> relative path, e.g. "Ideas" -> "projects/Ideas.md"
         public readonly Dictionary<string, string> NotesByName = new(StringComparer.OrdinalIgnoreCase);
         // Relative path without extension -> relative path, e.g. "projects/Ideas" -> "projects/Ideas.md"
@@ -29,6 +35,12 @@ sealed class NoteIndex
     }
 
     public const string NoteDirKey = "noteDir";
+
+    // A folder with more files and subfolders than this (hidden ones not counted) is scanned partly.
+    const int FullScanLimit = 50_000;
+
+    /// <summary>Thrown inside a full scan that went over <see cref="FullScanLimit"/>.</summary>
+    sealed class ScanLimitReachedException : Exception;
 
     /// <summary>How file system paths compare: ignoring case on Windows, exactly elsewhere.</summary>
     public static readonly StringComparison PathComparison =
@@ -44,6 +56,9 @@ sealed class NoteIndex
     // Only read and written on the UI thread; the scan itself runs on the thread pool.
     Snapshot? _snapshot;
     Task<Snapshot> _scan;
+    readonly Task<Snapshot> _firstScan;
+    // In a partial index: the folders that are scanned ("" is the root). Only changed on the UI thread.
+    readonly HashSet<string> _openFolders = [""];
 
     public string Root { get; }
 
@@ -55,6 +70,21 @@ sealed class NoteIndex
     /// <summary>False until the first folder scan has completed.</summary>
     public bool IsIndexed => _snapshot is not null;
 
+    /// <summary>Completes when the first folder scan has; after that, <see cref="IsPartial"/> is known.</summary>
+    public Task FirstScan => _firstScan;
+
+    /// <summary>
+    /// True for a folder too large to scan in full: only its top level and the folders opened in the page
+    /// (<see cref="OpenFolders"/>) are scanned. Links and search then only find files in those.
+    /// </summary>
+    public bool IsPartial => _firstScan.IsCompletedSuccessfully && _firstScan.Result.Partial;
+
+    /// <summary>In a partial index, the folders that are scanned (relative paths; "" is the root).</summary>
+    public IReadOnlyCollection<string> OpenFolders => _openFolders;
+
+    /// <summary>Raised on the UI thread when a partial index starts scanning another folder.</summary>
+    public event Action<string>? FolderOpened;
+
     public NoteIndex(string root, string id)
     {
         Root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
@@ -64,15 +94,41 @@ sealed class NoteIndex
             .UseYamlFrontMatter()
             .Use(new WikiLinkExtension(this))
             .Build();
-        _scan = Task.Run(Scan);
+        _scan = _firstScan = Task.Run(() => Scan(FullScanLimit, null));
         _ = PublishAsync(_scan);
     }
 
     /// <summary>Rescans the folder; the previous snapshot stays in use until the new one is ready.</summary>
     public Task Rebuild()
     {
-        _scan = Task.Run(Scan);
+        var openFolders = IsPartial ? _openFolders.ToList() : null;
+        _scan = Task.Run(() => Scan(int.MaxValue, openFolders));
         return PublishAsync(_scan);
+    }
+
+    /// <summary>
+    /// In a partial index, also scans these folders (and the folders they are in), so the tree shows their contents.
+    /// Completes when the tree includes them. Does nothing for a fully scanned folder.
+    /// </summary>
+    public async Task OpenFoldersAsync(IEnumerable<string> folders)
+    {
+        await _firstScan;
+        if (!IsPartial) return;
+        var added = false;
+        foreach (var folder in folders)
+        {
+            var parts = folder.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 1; i <= parts.Length; i++)
+            {
+                var rel = string.Join('/', parts[..i]);
+                if (_openFolders.Contains(rel) || FullPath(rel) is not { } full || !Directory.Exists(full)) continue;
+                _openFolders.Add(rel);
+                FolderOpened?.Invoke(rel);
+                added = true;
+            }
+        }
+        if (added) await Rebuild();
+        else await _scan;
     }
 
     async Task PublishAsync(Task<Snapshot> scan)
@@ -82,11 +138,17 @@ sealed class NoteIndex
         if (scan == _scan) _snapshot = snapshot;
     }
 
-    /// <summary>The folder tree with only the files <paramref name="showFile"/> accepts, leaving out folders that end up empty.</summary>
-    public async Task<string> TreeJsonAsync(Func<string, bool> showFile) =>
-        JsonSerializer.Serialize(Filter((await _scan).Tree, showFile), Json);
+    /// <summary>
+    /// The folder tree with only the files <paramref name="showFile"/> accepts, leaving out folders that end up
+    /// empty. In a partial index every folder stays: it may have unscanned contents, or the user just opened it.
+    /// </summary>
+    public async Task<string> TreeJsonAsync(Func<string, bool> showFile)
+    {
+        var snapshot = await _scan;
+        return JsonSerializer.Serialize(Filter(snapshot.Tree, showFile, keepFolders: snapshot.Partial), Json);
+    }
 
-    static Node Filter(Node folder, Func<string, bool> showFile)
+    static Node Filter(Node folder, Func<string, bool> showFile, bool keepFolders)
     {
         var children = new List<Node>();
         foreach (var child in folder.Children!)
@@ -95,7 +157,7 @@ sealed class NoteIndex
             {
                 if (showFile(child.Path)) children.Add(child);
             }
-            else if (Filter(child, showFile) is { Children.Count: > 0 } shown)
+            else if (Filter(child, showFile, keepFolders) is var shown && (keepFolders || shown.Children!.Count > 0))
             {
                 children.Add(shown);
             }
@@ -107,14 +169,35 @@ sealed class NoteIndex
         path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ||
         path.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase);
 
-    Snapshot Scan()
+    /// <param name="limit">Most files and folders to scan in full; above it, scan partly instead.</param>
+    /// <param name="openFolders">The folders to scan, for a partial scan; null for a full one.</param>
+    Snapshot Scan(int limit, List<string>? openFolders)
     {
-        var snapshot = new Snapshot();
-        snapshot.Tree = Walk(Root, snapshot) ?? new Node(Path.GetFileName(Root), "", []);
-        return snapshot;
+        if (openFolders is null)
+        {
+            var full = new Snapshot();
+            var budget = limit;
+            try
+            {
+                full.Tree = Walk(Root, full, ref budget, null) ?? new Node(Path.GetFileName(Root), "", []);
+                return full;
+            }
+            catch (ScanLimitReachedException)
+            {
+                openFolders = [""];
+            }
+        }
+
+        var partial = new Snapshot { Partial = true };
+        var unlimited = int.MaxValue;
+        partial.Tree = Walk(Root, partial, ref unlimited, openFolders.ToHashSet())
+            ?? new Node(Path.GetFileName(Root), "", []);
+        return partial;
     }
 
-    Node? Walk(string dir, Snapshot s)
+    /// <param name="budget">Files and folders left to scan; throws <see cref="ScanLimitReachedException"/> past 0.</param>
+    /// <param name="openFolders">For a partial scan, the folders to scan; the others are listed as unscanned.</param>
+    Node? Walk(string dir, Snapshot s, ref int budget, HashSet<string>? openFolders)
     {
         string[] subdirs, files;
         try
@@ -126,6 +209,8 @@ sealed class NoteIndex
         {
             return null;
         }
+        budget -= subdirs.Length + files.Length;
+        if (budget < 0) throw new ScanLimitReachedException();
 
         // Index files before descending so shallower notes win name collisions, like Obsidian.
         // The tree lists every file except hidden ones; TreeJsonAsync picks the kinds the page asks for.
@@ -151,11 +236,17 @@ sealed class NoteIndex
         {
             var name = Path.GetFileName(d);
             if (name.StartsWith('.') || name.Equals("node_modules", StringComparison.OrdinalIgnoreCase)) continue;
-            if (Walk(d, s) is { } node) dirNodes.Add(node);
+            // Don't follow links to folders (symlinks, junctions): they can point back up, like the links to "/" in
+            // Wine and Proton game prefixes, and the scan would never end.
+            if (new DirectoryInfo(d).LinkTarget is not null) continue;
+            if (openFolders is not null && !openFolders.Contains(Rel(d)))
+                dirNodes.Add(new Node(name, Rel(d), [], Unscanned: true));
+            else if (Walk(d, s, ref budget, openFolders) is { } node)
+                dirNodes.Add(node);
         }
 
         // Leave out empty folders; TreeJsonAsync also leaves out folders with none of the files asked for.
-        if (fileNodes.Count == 0 && dirNodes.Count == 0 && dir != Root) return null;
+        if (fileNodes.Count == 0 && dirNodes.Count == 0 && dir != Root && openFolders is null) return null;
         return new Node(Path.GetFileName(dir), Rel(dir), [.. dirNodes, .. fileNodes]);
     }
 
@@ -190,10 +281,12 @@ sealed class NoteIndex
             if (s.NotesByPath.TryGetValue(noExt, out var rel)) return rel;
             if (s.NotesByName.TryGetValue(noExt[(noExt.LastIndexOf('/') + 1)..], out rel)) return rel;
             if (s.FilesByName.TryGetValue(Path.GetFileName(target), out rel)) return rel;
-            return FullPath(target) is { } f && File.Exists(f) ? target : null;
+            if (FullPath(target) is { } f && File.Exists(f)) return target;
+            // A partial index hasn't seen every folder: look next to the note too.
+            if (!s.Partial) return null;
         }
 
-        // Index still loading: check the note's own folder and the root directly.
+        // Index still loading (or partial): check the note's own folder and the root directly.
         foreach (var dir in noteDir.Length > 0 ? new[] { noteDir, "" } : new[] { "" })
         {
             var candidate = dir.Length > 0 ? dir + "/" + target : target;

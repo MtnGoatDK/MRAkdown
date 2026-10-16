@@ -90,7 +90,7 @@ static class Roots
         Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(
             OperatingSystem.IsWindows() ? fullPath.ToLowerInvariant() : fullPath)))[..10];
 
-    static void Watch(NoteIndex index)
+    static async void Watch(NoteIndex index)
     {
         var ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Roots must be used on the UI thread");
         // Rebuild once changes have settled for 250 ms; each change restarts the wait.
@@ -104,21 +104,38 @@ static class Roots
             Changed?.Invoke(index);
         }
 
-        var watcher = new FileSystemWatcher(index.Root)
-        {
-            IncludeSubdirectories = true,
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
-        };
         FileSystemEventHandler onChange = (_, e) =>
         {
             // Ignore churn inside .git, .obsidian etc.
             if (Path.GetRelativePath(index.Root, e.FullPath).Split('\\', '/').Any(s => s.StartsWith('.'))) return;
             ui.Post(_ => Debounce(), null);
         };
-        watcher.Changed += onChange;
-        watcher.Created += onChange;
-        watcher.Deleted += onChange;
-        watcher.Renamed += (s, e) => onChange(s, e);
-        watcher.EnableRaisingEvents = true;
+        var watched = new HashSet<string>();
+        void Start(string rel, bool subfolders)
+        {
+            var folder = rel.Length == 0 ? index.Root : index.FullPath(rel);
+            if (folder is null || !watched.Add(rel)) return;
+            var watcher = new FileSystemWatcher(folder)
+            {
+                IncludeSubdirectories = subfolders,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+            };
+            watcher.Changed += onChange;
+            watcher.Created += onChange;
+            watcher.Deleted += onChange;
+            watcher.Renamed += (s, e) => onChange(s, e);
+            // Starting it adds a watch for every subfolder, which takes seconds for a big folder on Linux: not on the UI thread.
+            _ = Task.Run(() => watcher.EnableRaisingEvents = true);
+        }
+
+        // A partial index (a very large folder) only watches the folders it has scanned, not everything below them.
+        index.FolderOpened += rel => Start(rel, false);
+        await index.FirstScan;
+        if (!index.IsPartial)
+        {
+            Start("", true);
+            return;
+        }
+        foreach (var rel in index.OpenFolders.ToList()) Start(rel, false);
     }
 }

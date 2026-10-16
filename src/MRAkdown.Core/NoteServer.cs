@@ -29,7 +29,11 @@ static class NoteServer
         try
         {
             if (path == "/__api/tree" && Roots.Find(query["r"]) is { } treeRoot)
+            {
+                // The folders open in the page: a very large folder only scans those (see NoteIndex.IsPartial).
+                await treeRoot.OpenFoldersAsync(query.GetValues("open") ?? []);
                 return PageResponse.Json(await treeRoot.TreeJsonAsync(TreeFiles(query["files"])));
+            }
             if (path == "/")
                 return PageResponse.Ok(ReadResource("app.html"), "text/html");
             if (path.StartsWith("/__app/"))
