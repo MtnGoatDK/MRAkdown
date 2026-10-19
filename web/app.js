@@ -340,7 +340,7 @@ function expandAncestors(path) {
 
 // The window shows one or two panes side by side. Each has its own tabs, view mode, editor and history:
 // { el, tabbarEl, tabsEl, viewEl, contentEl, tabs, activeTab, current, mode, editor, tabEls, openedInBackground }
-// current is the path of the file shown in its active tab; mode is 'read' | 'edit' | 'split'. The editor module is
+// current is the path of the file shown in its active tab; mode is 'read' | 'edit' | 'split' | 'live'. The editor module is
 // only imported on a pane's first switch away from 'read'. The folder panel, window title and keyboard shortcuts
 // follow the active pane: the one last clicked or typed in.
 const panes = [];
@@ -1230,14 +1230,32 @@ async function setViewMode(pane, mode) {
       showNote: (note) => showNote(pane, note),
       setDirty: (dirty) => setDirty(pane, dirty),
       getMode: () => pane.mode,
+      isPlain: () => pane.el.classList.contains('plain-file'),
       saveDraft: (text) => saveDraftAs(pane, text),
       write: writeFile,
       shortcut: (e) => actionFor(e, 'editor')?.id ?? null,
       hint: shortcutHint,
+      // A link clicked in Live mode, with the same modifier keys as in the reading view.
+      openLink: (href, e) => openHref(href, e, e.button === 1),
+      calloutColor: (type) => CALLOUT_COLORS[type] ?? CALLOUT_COLORS.note,
     });
   }
   const editor = pane.editor;
   const tab = pane.activeTab;
+
+  // Between Edit, Split and Live the editor keeps the text (and any unsaved edits); only the view changes.
+  if (pane.mode !== 'read' && mode !== 'read') {
+    pane.mode = mode;
+    pane.el.dataset.mode = mode;
+    for (const btn of pane.el.querySelectorAll('.toolbar button[data-mode]')) {
+      btn.classList.toggle('active', btn.dataset.mode === mode);
+    }
+    await editor.useSurface();
+    editor.renderPreview();
+    editor.focus();
+    return;
+  }
+
   const leavingEdit = pane.mode !== 'read' && mode === 'read';
   if (leavingEdit && tab?.draft) tab.draftText = editor.text();
   else if (leavingEdit && tab && !(await keepOrSave(pane, tab))) return;
@@ -1364,6 +1382,13 @@ function onContentLink(pane, e, middle) {
     return;
   }
 
+  openHref(href, e, middle);
+}
+
+/** Opens a link's address: a note (in a tab, as clickTarget says), another file in its app, or a web page. */
+function openHref(href, e, middle) {
+  const a = document.createElement('a');
+  a.setAttribute('href', href);
   const note = noteLink(a);
   if (note) {
     openIn(note.root, note.path, clickTarget(e, middle), note.hash);
@@ -1594,6 +1619,10 @@ const ACTIONS = [
   {
     id: 'toggleSplit', group: 'View', label: 'Split mode on or off', keys: ['Ctrl+Shift+E'],
     run: () => setViewMode(activePane, activePane.mode !== 'read' ? 'read' : 'split'),
+  },
+  {
+    id: 'toggleLive', group: 'View', label: 'Live mode on or off', keys: ['Ctrl+Shift+L'],
+    run: () => setViewMode(activePane, activePane.mode !== 'read' ? 'read' : 'live'),
   },
   { id: 'toggleSidebar', group: 'View', label: 'Show or hide the folder panel', keys: ['Ctrl+\\'], run: () => toggleSidebar() },
   {

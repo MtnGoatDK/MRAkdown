@@ -9,3 +9,6 @@ dist/
 .vs/
 *.user
 Thumbs.db
+
+# CodeMirror bundle build (tools/codemirror): packages only, the bundle itself is committed
+tools/codemirror/node_modules/

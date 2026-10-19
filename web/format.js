@@ -1,5 +1,5 @@
 // Formatting toolbar for the Markdown editor. Loaded together with editor.js (only when editing).
-// All changes go through execCommand('insertText'), so Ctrl+Z / Ctrl+Y undo and redo them.
+// All changes go through the surface's replaceSelection, so Ctrl+Z / Ctrl+Y undo and redo them.
 
 const icon = (paths) =>
   `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -38,21 +38,19 @@ const LINE_KINDS = {
 const IMAGE_TYPES = /^image\/(png|jpe?g|gif|webp|svg\+xml|bmp|avif)$/;
 
 /**
- * Builds the toolbar for a textarea.
- * @param {HTMLTextAreaElement} ta
+ * Builds the toolbar for the editor's text: the plain text box or the Live editor (see "Surfaces" in editor.js).
+ * @param {object} ed the surface in use: value, selectionStart/End, setSelectionRange, replaceSelection, undo, redo,
+ *   focus, disabled, element, on(type, handler) and isPlainFile()
  * @param {{ uploadImage: (file: File, name: string) => Promise<string|null> }} host
  *   uploadImage saves an image next to the note and resolves to its relative link (or null on failure).
  */
-export function createToolbar(ta, { uploadImage, shortcut, hint }) {
+export function createToolbar(ed, { uploadImage, shortcut, hint }) {
   /** Replaces the selection, keeping it in the undo history. */
-  function replaceSelection(text) {
-    if (text) document.execCommand('insertText', false, text);
-    else if (ta.selectionStart !== ta.selectionEnd) document.execCommand('delete');
-  }
+  const replaceSelection = (text) => ed.replaceSelection(text);
 
   /** Wraps the selection in markers, or removes them if it is already wrapped. */
   function wrap(before, after, placeholder) {
-    const { selectionStart: s, selectionEnd: e, value } = ta;
+    const { selectionStart: s, selectionEnd: e, value } = ed;
     const inner = value.slice(s, e);
     const outsideBefore = value.slice(s - before.length, s);
     const outsideAfter = value.slice(e, e + after.length);
@@ -60,26 +58,26 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
     const partOfLonger = before.length === 1 && value[s - 2] === before && value[s - 3] !== before;
 
     if (outsideBefore === before && outsideAfter === after && !partOfLonger) {
-      ta.setSelectionRange(s - before.length, e + after.length);
+      ed.setSelectionRange(s - before.length, e + after.length);
       replaceSelection(inner);
-      ta.setSelectionRange(s - before.length, e - before.length);
+      ed.setSelectionRange(s - before.length, e - before.length);
     } else if (inner.length > before.length + after.length && inner.startsWith(before) && inner.endsWith(after)) {
       const unwrapped = inner.slice(before.length, inner.length - after.length);
       replaceSelection(unwrapped);
-      ta.setSelectionRange(s, s + unwrapped.length);
+      ed.setSelectionRange(s, s + unwrapped.length);
     } else {
       const text = inner || placeholder;
       replaceSelection(before + text + after);
-      ta.setSelectionRange(s + before.length, s + before.length + text.length);
+      ed.setSelectionRange(s + before.length, s + before.length + text.length);
     }
   }
 
   /** The full lines touched by the selection: [start, end) offsets. */
   function selectedLines() {
-    const { value } = ta;
-    let e = ta.selectionEnd;
-    if (e > ta.selectionStart && value[e - 1] === '\n') e--;
-    const start = value.lastIndexOf('\n', ta.selectionStart - 1) + 1;
+    const { value } = ed;
+    let e = ed.selectionEnd;
+    if (e > ed.selectionStart && value[e - 1] === '\n') e--;
+    const start = value.lastIndexOf('\n', ed.selectionStart - 1) + 1;
     let end = value.indexOf('\n', e);
     if (end < 0) end = value.length;
     return [start, end];
@@ -88,7 +86,7 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
   /** Toggles a heading, list or quote marker on the selected lines. */
   function formatLines(kind) {
     const [start, end] = selectedLines();
-    const lines = ta.value.slice(start, end).split('\n');
+    const lines = ed.value.slice(start, end).split('\n');
     const parsed = lines.map((line) => {
       const m = line.match(LINE_PREFIX);
       return { indent: m[1], prefix: m[2] ?? '', rest: line.slice(m[0].length) };
@@ -103,9 +101,9 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
       return p.indent + (turnOff ? '' : kind.make(n++)) + p.rest;
     }).join('\n');
 
-    ta.setSelectionRange(start, end);
+    ed.setSelectionRange(start, end);
     replaceSelection(result);
-    if (lines.length > 1) ta.setSelectionRange(start, start + result.length);
+    if (lines.length > 1) ed.setSelectionRange(start, start + result.length);
   }
 
   /**
@@ -113,32 +111,32 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
    * doesn't become part of it. selectFrom/selectTo pick text inside it.
    */
   function insertBlock(text, selectFrom = text.length, selectTo = selectFrom) {
-    const s = ta.selectionStart;
-    const before = ta.value.slice(0, s);
-    const after = ta.value.slice(ta.selectionEnd);
+    const s = ed.selectionStart;
+    const before = ed.value.slice(0, s);
+    const after = ed.value.slice(ed.selectionEnd);
     const lead = before === '' || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
     const trail = after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
     replaceSelection(lead + text + trail);
-    ta.setSelectionRange(s + lead.length + selectFrom, s + lead.length + selectTo);
+    ed.setSelectionRange(s + lead.length + selectFrom, s + lead.length + selectTo);
   }
 
   function link(prefix = '') {
-    const { selectionStart: s, selectionEnd: e, value } = ta;
+    const { selectionStart: s, selectionEnd: e, value } = ed;
     const sel = value.slice(s, e);
     if (/^(https?:\/\/|mailto:)\S+$/.test(sel)) {
       // Selected a URL: wrap it and put the caret in the label.
       replaceSelection(`${prefix}[](${sel})`);
-      ta.setSelectionRange(s + prefix.length + 1, s + prefix.length + 1);
+      ed.setSelectionRange(s + prefix.length + 1, s + prefix.length + 1);
     } else {
       const label = sel || (prefix ? 'alt text' : 'link text');
       replaceSelection(`${prefix}[${label}](url)`);
       const urlAt = s + prefix.length + label.length + 3;
-      ta.setSelectionRange(urlAt, urlAt + 3);
+      ed.setSelectionRange(urlAt, urlAt + 3);
     }
   }
 
   function codeBlock() {
-    const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+    const sel = ed.value.slice(ed.selectionStart, ed.selectionEnd);
     // Caret goes after the opening fence so a language can be typed.
     insertBlock('```\n' + sel + '\n```', 3);
   }
@@ -150,12 +148,12 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
 
   /** Removes inline markers and line markers from the selection (or the current line). */
   function clearFormatting() {
-    if (ta.selectionStart === ta.selectionEnd) {
+    if (ed.selectionStart === ed.selectionEnd) {
       const [start, end] = selectedLines();
-      ta.setSelectionRange(start, end);
+      ed.setSelectionRange(start, end);
     }
-    const s = ta.selectionStart;
-    const cleaned = ta.value.slice(s, ta.selectionEnd)
+    const s = ed.selectionStart;
+    const cleaned = ed.value.slice(s, ed.selectionEnd)
       .split('\n')
       .map((line) => {
         const m = line.match(LINE_PREFIX);
@@ -165,7 +163,7 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
       .replace(/\*\*|__|~~|==|`/g, '')
       .replace(/(^|[^\w*])[*_](?=\S)(.+?)(?<=\S)[*_](?=$|[^\w*])/g, '$1$2');
     replaceSelection(cleaned);
-    ta.setSelectionRange(s, s + cleaned.length);
+    ed.setSelectionRange(s, s + cleaned.length);
   }
 
   async function insertImages(files, nameFor = (f) => f.name) {
@@ -173,7 +171,7 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
     for (const file of images) {
       const linkPath = await uploadImage(file, nameFor(file));
       if (!linkPath) continue;
-      ta.focus();
+      ed.focus();
       const alt = nameFor(file).replace(/\.[^.]+$/, '');
       replaceSelection(`![${alt}](${linkPath})`);
     }
@@ -191,8 +189,8 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
   });
 
   const ITEMS = [
-    ['undo', 'Undo (Ctrl+Z)', () => document.execCommand('undo')],
-    ['redo', 'Redo (Ctrl+Y)', () => document.execCommand('redo')],
+    ['undo', 'Undo (Ctrl+Z)', () => ed.undo()],
+    ['redo', 'Redo (Ctrl+Y)', () => ed.redo()],
     ['clear', 'Clear formatting', clearFormatting],
     null,
     ['bold', 'Bold', () => wrap('**', '**', 'bold text')],
@@ -239,8 +237,8 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
     // Keep focus and selection in the editor while clicking.
     btn.addEventListener('mousedown', (e) => e.preventDefault());
     btn.addEventListener('click', () => {
-      if (ta.disabled) return;
-      ta.focus();
+      if (ed.disabled) return;
+      ed.focus();
       action();
     });
     bar.append(btn);
@@ -248,9 +246,9 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
   bar.append(picker);
 
   // Markdown helpers only apply to .md files; other files are edited as plain text (their pane says which).
-  const isPlainFile = () => ta.closest('.pane')?.classList.contains('plain-file') ?? false;
+  const isPlainFile = () => ed.isPlainFile();
 
-  ta.addEventListener('keydown', (e) => {
+  ed.on('keydown', (e) => {
     if (isPlainFile()) return;
     const run = { bold: () => wrap('**', '**', 'bold text'), italic: () => wrap('*', '*', 'italic text'), link: () => link() }[shortcut?.(e)];
     if (!run) return;
@@ -259,7 +257,7 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
   });
 
   // Paste or drop images straight into the note.
-  ta.addEventListener('paste', (e) => {
+  ed.on('paste', (e) => {
     if (isPlainFile()) return;
     const files = e.clipboardData?.files;
     if (!files?.length || ![...files].some((f) => IMAGE_TYPES.test(f.type))) return;
@@ -269,10 +267,10 @@ export function createToolbar(ta, { uploadImage, shortcut, hint }) {
     const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
     insertImages(files, (f) => `Pasted image ${stamp}.${f.type.split('/')[1].replace('svg+xml', 'svg').replace('jpeg', 'jpg')}`);
   });
-  ta.addEventListener('dragover', (e) => {
+  ed.on('dragover', (e) => {
     if (!isPlainFile() && e.dataTransfer?.types.includes('Files')) e.preventDefault();
   });
-  ta.addEventListener('drop', (e) => {
+  ed.on('drop', (e) => {
     if (isPlainFile() || !e.dataTransfer?.files.length) return;
     e.preventDefault();
     insertImages(e.dataTransfer.files);

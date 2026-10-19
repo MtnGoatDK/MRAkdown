@@ -68,6 +68,13 @@ static class NoteServer
             ("/__api/source", false) => PageResponse.Text(index.ReadSource(note)),
             ("/__api/render", true) => PageResponse.Json(index.RenderJson(note, BodyText())),
             ("/__api/save", true) => SaveNote(),
+            // Where a [[wikilink]] in the note points (for Live mode), as in the reading view; url is null if nowhere.
+            ("/__api/resolve", false) => PageResponse.Json(JsonSerializer.Serialize(new
+            {
+                url = index.Resolve(query["t"] ?? "", Path.GetDirectoryName(note)?.Replace('\\', '/') ?? "") is { } rel
+                    ? index.ToUrl(rel)
+                    : null,
+            })),
             ("/__api/upload", true) => PageResponse.Json(JsonSerializer.Serialize(new
             {
                 link = index.SaveAttachment(note, query["name"] ?? "image.png", readBody()),

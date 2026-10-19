@@ -11,7 +11,7 @@
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
-.pane[data-mode="edit"] .md-toolbar { justify-content: center; }
+.pane[data-mode="edit"] .md-toolbar, .pane[data-mode="live"] .md-toolbar { justify-content: center; }
 body.hide-format .md-toolbar,
 .pane.plain-file .md-toolbar { display: none; }
 .md-toolbar button {
@@ -33,6 +33,7 @@ body.hide-format .md-toolbar,
 .md-sep { width: 1px; height: 18px; margin: 0 6px; background: var(--border); }
 .editor-pane:has(.editor:disabled) .md-toolbar button { opacity: 0.4; cursor: default; }
 .pane[data-mode="edit"] .editor-pane,
+.pane[data-mode="live"] .editor-pane,
 .pane[data-mode="split"] .editor-pane { display: flex; }
 .pane[data-mode="split"] .editor-pane { flex: 0 0 var(--split, 50%); }
 
@@ -75,3 +76,7 @@ body:has(.split-resizer.dragging) .view { pointer-events: none; }
 
 .pane[data-mode="split"] .editor { padding: 28px 32px 160px; }
 .pane[data-mode="split"] .markdown { padding-left: 32px; padding-right: 32px; }
+
+/* Live mode shows the Live editor (live.js) instead of the text box */
+.editor-pane.live-on .editor { display: none; }
+.editor-pane:not(.live-on) .live-editor { display: none; }

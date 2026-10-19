@@ -16,7 +16,10 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 - **Folder sidebar** with search by file name and path. Opening a file shows its nearest `.obsidian` or `.git`
   folder, or else its own folder. Choose whether the sidebar lists Markdown files only, also files with a viewer of
   their own, or all files; hidden files and folders and `node_modules` are left out.
-- **Read, Edit and Split** (live preview) modes, with a formatting toolbar. Pasted or dropped images are saved in an
+- **Read, Live, Edit and Split** modes, with a formatting toolbar. **Live** edits a Markdown file while it looks as it
+  does when read: headings, emphasis, links, images, lists, task checkboxes, quotes, callouts, code blocks and tables
+  show formatted, and the line the cursor is on (or the table it's in) shows its Markdown. The file stays exactly the
+  text you type. **Split** shows the text and a live preview side by side. Pasted or dropped images are saved in an
   `attachments` folder next to the file.
 - **Saving when you choose:** a tab keeps its unsaved edits (marked with a dot) until you save them with `Ctrl+S`,
   also while you look at other tabs. You're asked Save / Don't save / Cancel before they'd be lost: closing the tab or
@@ -127,7 +130,7 @@ buttons can't).
 | `Ctrl+N` / `Ctrl+Shift+N` | New file / new window |
 | `Ctrl+O` / `Ctrl+Shift+O` | Open file / open folder |
 | `Ctrl+S` | Save (asks where, for a new file) |
-| `Ctrl+E` / `Ctrl+Shift+E` | Toggle Edit / Split mode |
+| `Ctrl+E` / `Ctrl+Shift+E` / `Ctrl+Shift+L` | Toggle Edit / Split / Live mode |
 | `Ctrl+P` | Search files (`Enter` opens the first match, `Esc` clears) |
 | `Ctrl+T` (or the + after the tabs), `Ctrl+W`, `Ctrl+Shift+T` | New, close, reopen tab |
 | `Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+PageDown`, `Ctrl+PageUp` | Next / previous tab |
@@ -166,6 +169,7 @@ MRAkdown is free software under the [GNU General Public License v3.0](LICENSE).
 
 It uses [Markdig](https://github.com/xoofx/markdig) (BSD-2-Clause), [Gir.Core](https://gircore.github.io/) (MIT) and
 the WebView2 SDK (BSD-3-Clause style, Microsoft), and includes [highlight.js](https://highlightjs.org/) 11.9.0
-(BSD-3-Clause) in `web/hljs*`.
+(BSD-3-Clause) in `web/hljs*` and [CodeMirror 6](https://codemirror.net/) with Lezer (MIT) in `web/codemirror.js`,
+bundled from the exact versions in `tools/codemirror` (`npm ci && npm run build` there rebuilds it).
 
 MRAkdown isn't affiliated with or endorsed by Obsidian.
