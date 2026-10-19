@@ -436,6 +436,8 @@ export function createLiveSurface(parent, host) {
     editable.of(EditorView.editable.of(!disabled)),
     tableField(),
     livePreview,
+    // CodeMirror manages its element's classes, so they're given here rather than added afterwards
+    EditorView.editorAttributes.of({ class: 'live-editor' }),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) host.onInput();
     }),
@@ -453,12 +455,16 @@ export function createLiveSurface(parent, host) {
   ];
 
   let disabled = true;
-  const view = new EditorView({ parent, state: EditorState.create({ doc: '', extensions: extensions() }) });
-  view.dom.classList.add('live-editor');
+  // Our own element around the editor, for the classes editor.js sets (which surface is in use)
+  const root = document.createElement('div');
+  parent.append(root);
+  const view = new EditorView({ parent: root, state: EditorState.create({ doc: '', extensions: extensions() }) });
 
   const surface = {
     element: view.contentDOM,
+    root,
     view,
+    scrollBox: () => view.scrollDOM,
     get value() { return view.state.doc.toString(); },
     /** Replaces the whole text with a fresh document (and a fresh undo history). */
     set value(text) {

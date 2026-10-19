@@ -12,10 +12,11 @@ import { createToolbar } from '/__app/format.js';
  *   write saves a file's text (see writeFile in app.js); resolves false if it wasn't saved.
  *   shortcut(keydown event) names the editor action its keys are set to ('bold', 'italic', 'link') or null, and
  *   hint(action) gives its keys for tooltips (see "Keyboard shortcuts" in app.js).
- *   isPlain says whether the file isn't Markdown; Live mode then edits it as plain text.
+ *   isPlain says whether the file isn't Markdown, and viewKind how the reading view shows it ('json', 'xml', 'csv',
+ *   'text' or 'code'): Live mode is a code editor for JSON and XML, a table for CSV, and plain text otherwise.
  *   openLink opens a link clicked in Live mode; calloutColor gives a callout type's colour (see app.js).
  */
-export function createEditor({ view, showNote, setDirty, getMode, isPlain, saveDraft, write, shortcut, hint, openLink, calloutColor }) {
+export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewKind, saveDraft, write, shortcut, hint, openLink, calloutColor }) {
   const css = document.createElement('link');
   css.rel = 'stylesheet';
   css.href = '/__app/editor.css';
@@ -52,8 +53,11 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, saveD
     get scrollTop() { return ta.scrollTop; },
     set scrollTop(value) { ta.scrollTop = value; },
     on: (type, fn) => ta.addEventListener(type, fn),
+    scrollBox: () => ta,
   };
-  let liveSurface = null; // created the first time Live mode is used
+  // Live mode's surfaces, each created the first time it's needed: markdown (live.js), code for JSON and XML
+  // (live-code.js) and csv (live-csv.js).
+  const liveSurfaces = {};
   let surface = textSurface;
   const listeners = []; // [type, fn] from the toolbar, added to each surface
 
@@ -72,7 +76,7 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, saveD
     on(type, fn) {
       listeners.push([type, fn]);
       textSurface.on(type, fn);
-      liveSurface?.on(type, fn);
+      for (const s of Object.values(liveSurfaces)) s.on(type, fn);
     },
     isPlainFile: () => isPlain(),
   };
@@ -81,43 +85,61 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, saveD
   view.before(pane);
   setupSplitResizer(pane);
 
+  /** Which surface the file needs: Live mode depends on the file type; the other modes use the text box. */
+  function wantedSurface() {
+    if (getMode() !== 'live') return 'text';
+    if (!isPlain()) return 'markdown';
+    const kind = viewKind();
+    return kind === 'json' || kind === 'xml' ? 'code' : kind === 'csv' ? 'csv' : 'text';
+  }
+
+  async function createSurface(name) {
+    if (name === 'markdown') {
+      const { createLiveSurface } = await import('/__app/live.js');
+      return createLiveSurface(pane, { onInput, calloutColor, fileUrl, resolveWikilink, openLink: openLiveLink });
+    }
+    if (name === 'code') {
+      const { createCodeSurface } = await import('/__app/live-code.js');
+      return createCodeSurface(pane, { onInput });
+    }
+    const { createCsvSurface } = await import('/__app/live-csv.js');
+    return createCsvSurface(pane, { onInput, title: () => (note?.path ?? '').split('/').pop() });
+  }
+
   /**
-   * Uses the Live editor in Live mode (for Markdown files), else the text box. The text, selection and the place
-   * you're at move across, so switching between Edit and Live keeps unsaved edits.
+   * Uses the surface the pane's mode and file need (see wantedSurface). The text, selection and the place you're at
+   * move across, so switching between Edit and Live keeps unsaved edits.
    */
   async function useSurface() {
-    const wanted = getMode() === 'live' && !isPlain() ? 'live' : 'text';
-    if (wanted === 'live' && !liveSurface) {
-      const { createLiveSurface } = await import('/__app/live.js');
-      liveSurface = createLiveSurface(pane, {
-        onInput,
-        calloutColor,
-        fileUrl,
-        resolveWikilink,
-        openLink: (link, e) => openLiveLink(link, e),
-      });
-      for (const [type, fn] of listeners) liveSurface.on(type, fn);
+    const name = wantedSurface();
+    if (name !== 'text' && !liveSurfaces[name]) {
+      const created = await createSurface(name);
+      created.root.classList.add('live-surface');
+      for (const [type, fn] of listeners) created.on(type, fn);
+      liveSurfaces[name] = created;
     }
-    const next = wanted === 'live' ? liveSurface : textSurface;
+    const next = name === 'text' ? textSurface : liveSurfaces[name];
+    // The code editor's language follows the file (set before its text is)
+    next.setLanguage?.(viewKind());
     if (next === surface) return;
     const { value, selectionStart, selectionEnd, disabled } = surface;
     const scrolled = scrollFraction(surface);
     surface = next;
-    pane.classList.toggle('live-on', surface === liveSurface);
+    pane.classList.toggle('live-on', surface !== textSurface);
+    for (const s of Object.values(liveSurfaces)) s.root.classList.toggle('surface-active', s === surface);
     surface.value = value;
     surface.disabled = disabled;
     surface.setSelectionRange(selectionStart, selectionEnd);
     requestAnimationFrame(() => setScrollFraction(surface, scrolled));
   }
 
-  const scrollBox = (s) => (s === liveSurface ? s.view.scrollDOM : ta);
   function scrollFraction(s) {
-    const box = scrollBox(s);
+    const box = s.scrollBox();
     const max = box.scrollHeight - box.clientHeight;
     return max > 0 ? box.scrollTop / max : 0;
   }
   function setScrollFraction(s, fraction) {
-    const box = scrollBox(s);
+    const box = s.scrollBox();
     box.scrollTop = fraction * (box.scrollHeight - box.clientHeight);
   }
 

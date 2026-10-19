@@ -1182,6 +1182,7 @@ function showNote(pane, note) {
   // Markdown-only tools (formatting toolbar, shortcuts, image paste) are hidden for other files.
   pane.el.classList.toggle('plain-file', note.markdown === false);
   content.classList.remove('viewer-wide', 'diff-wide');
+  delete content.dataset.viewKind; // set again by the viewer for files it shows (see renderViewer)
   if (note.markdown === false && !note.binary && !note.tooLarge) {
     showInViewer(content, note);
   } else if (note.markdown === false) {
@@ -1208,7 +1209,11 @@ function showInViewer(content, note) {
   import('/__app/viewers.js').then((module) => {
     viewers = module;
     // Still showing the same file? Then switch to its viewer.
-    if (content.querySelector('.inline-title')?.textContent === note.title) viewers.renderViewer(content, note, host);
+    if (content.querySelector('.inline-title')?.textContent !== note.title) return;
+    viewers.renderViewer(content, note, host);
+    // Now that the file's type is known, a pane in Live mode can switch to the editor for it.
+    const pane = panes.find((p) => p.contentEl === content);
+    if (pane?.editor && pane.mode === 'live') pane.editor.useSurface();
   });
 }
 
@@ -1231,6 +1236,7 @@ async function setViewMode(pane, mode) {
       setDirty: (dirty) => setDirty(pane, dirty),
       getMode: () => pane.mode,
       isPlain: () => pane.el.classList.contains('plain-file'),
+      viewKind: () => pane.contentEl.dataset.viewKind ?? null,
       saveDraft: (text) => saveDraftAs(pane, text),
       write: writeFile,
       shortcut: (e) => actionFor(e, 'editor')?.id ?? null,

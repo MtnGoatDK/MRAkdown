@@ -56,6 +56,8 @@ export function renderViewer(container, note, host) {
   const auto = autoKind(ext, note.text, host.kindByExt);
   const chosen = host.store.get(choiceKey(ext), null);
   const kind = KINDS[chosen] ? chosen : auto;
+  // Read by the editor: Live mode offers a code editor for JSON and XML and a table for CSV (see editor.js).
+  container.dataset.viewKind = kind;
   const rerender = () => renderViewer(container, note, host);
   // Tables and XML (long attribute values) use the full width.
   container.classList.toggle('viewer-wide', kind === 'csv' || kind === 'xml');

@@ -17,6 +17,51 @@
 .live-editor .cm-selectionBackground, .live-editor.cm-focused .cm-selectionBackground,
 .live-editor .cm-content ::selection { background: var(--accent-soft) !important; }
 
+/* JSON and XML (live-code.js): a code editor across the pane, with line numbers */
+.live-editor.live-code .cm-scroller { font: 13.5px/1.6 "Cascadia Code", Consolas, monospace; font-variant-ligatures: none; }
+.live-editor.live-code .cm-content { max-width: none; margin: 0; padding: 16px 24px 160px 8px; }
+.live-editor.live-code .cm-gutters { background: var(--bg); border-right: 1px solid var(--border); color: var(--faint); }
+.live-editor.live-code .cm-activeLine, .live-editor.live-code .cm-activeLineGutter { background: var(--hover); }
+.live-editor.live-code .cm-matchingBracket { background: var(--accent-soft); outline: 1px solid var(--accent); }
+.live-editor.live-code .cm-foldPlaceholder { background: var(--hover); border: 1px solid var(--border); color: var(--muted); }
+.live-editor.live-code .cm-tooltip { background: var(--bg-side); border: 1px solid var(--border); color: var(--text); }
+
+/* CSV and TSV (live-csv.js): an editable table */
+.live-csv { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 24px 24px; background: var(--bg); }
+.live-csv-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+.live-csv-actions { display: flex; gap: 4px; }
+.live-csv-actions button, .live-csv .viewer-more {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.live-csv-actions button:hover, .live-csv .viewer-more:hover { background: var(--hover); color: var(--text); }
+.live-csv .viewer-more { margin: 8px; }
+.live-csv-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.live-csv-table { border-collapse: collapse; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+.live-csv-table td, .live-csv-table th { padding: 5px 10px; border: 1px solid var(--border); vertical-align: top; }
+.live-csv-table td { min-width: 60px; max-width: 480px; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
+.live-csv-table td:focus { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+.live-csv-table .live-csv-no {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 36px;
+  background: var(--bg-side);
+  color: var(--faint);
+  font-weight: 400;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.live-csv-table .live-csv-head td { position: sticky; top: 0; z-index: 2; background: var(--bg-side); font-weight: 600; }
+.live-csv-table .live-csv-head .live-csv-no { z-index: 3; top: 0; }
+
 /* Headings, sized as in the reading view */
 .live-editor .cm-lp-h1 { font-size: 1.8em; line-height: 1.3; padding-top: 0.6em !important; }
 .live-editor .cm-lp-h2 { font-size: 1.5em; line-height: 1.3; padding-top: 0.5em !important; }

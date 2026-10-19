@@ -77,6 +77,9 @@ body:has(.split-resizer.dragging) .view { pointer-events: none; }
 .pane[data-mode="split"] .editor { padding: 28px 32px 160px; }
 .pane[data-mode="split"] .markdown { padding-left: 32px; padding-right: 32px; }
 
-/* Live mode shows the Live editor (live.js) instead of the text box */
+/* Live mode shows the surface the file type needs (live.js, live-code.js, live-csv.js) instead of the text box */
 .editor-pane.live-on .editor { display: none; }
-.editor-pane:not(.live-on) .live-editor { display: none; }
+.live-surface { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.live-surface > .cm-editor { flex: 1; min-height: 0; }
+.editor-pane:not(.live-on) .live-surface,
+.editor-pane .live-surface:not(.surface-active) { display: none; }

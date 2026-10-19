@@ -449,8 +449,9 @@ body.side-hidden #show-side { display: flex; }
 body:not(.hide-format) .format-toggle { background: var(--accent-soft); color: var(--accent); }
 /* Non-Markdown files: no formatting toggle (the toolbar itself is hidden in editor.css), wider monospaced view */
 .pane.plain-file .toolbar .format-toggle, .pane.plain-file .format-sep { display: none; }
-/* Live mode is for Markdown; other files keep Read, Edit and Split */
-.pane.plain-file .toolbar button[data-mode="live"] { display: none; }
+/* Live mode is for Markdown, and JSON, XML and CSV files (as the reading view shows them); other files keep Read,
+   Edit and Split */
+.pane.plain-file:not(:has(.content[data-view-kind="json"], .content[data-view-kind="xml"], .content[data-view-kind="csv"])) .toolbar button[data-mode="live"] { display: none; }
 .pane.plain-file .markdown { max-width: 1100px; }
 .markdown pre.text-file { white-space: pre; font-size: 13px; line-height: 1.55; }
 .unsaved { display: none; width: 7px; height: 7px; margin: 0 6px; border-radius: 50%; background: var(--accent); }

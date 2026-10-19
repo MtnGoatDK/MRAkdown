@@ -19,7 +19,9 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 - **Read, Live, Edit and Split** modes, with a formatting toolbar. **Live** edits a Markdown file while it looks as it
   does when read: headings, emphasis, links, images, lists, task checkboxes, quotes, callouts, code blocks and tables
   show formatted, and the line the cursor is on (or the table it's in) shows its Markdown. The file stays exactly the
-  text you type. **Split** shows the text and a live preview side by side. Pasted or dropped images are saved in an
+  text you type. For JSON and XML files, Live is a code editor with colours, line numbers, folding and (for JSON)
+  syntax errors marked as you type; for CSV and TSV files it's an editable table where you can add and remove rows and
+  columns, and only the cells you change are rewritten in the file. **Split** shows the text and a live preview side by side. Pasted or dropped images are saved in an
   `attachments` folder next to the file.
 - **Saving when you choose:** a tab keeps its unsaved edits (marked with a dot) until you save them with `Ctrl+S`,
   also while you look at other tabs. You're asked Save / Don't save / Cancel before they'd be lost: closing the tab or
