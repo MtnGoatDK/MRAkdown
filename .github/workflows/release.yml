@@ -1,0 +1,52 @@
+# Builds the Windows download and publishes it as a GitHub release when a version tag is pushed:
+#   git tag v1.0.0
+#   git push origin v1.0.0
+# The tag (without the "v") becomes the program's version.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the release and upload the file
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          # One small .exe that uses the installed .NET 10 Desktop Runtime. No ReadyToRun: it crashes combined
+          # with single-file on installed .NET.
+          dotnet publish src/MRAkdown.Windows -c Release -r win-x64 --self-contained false `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=false `
+            -p:DebugType=none -p:Version=$version -o out
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item out/MRAkdown.exe, LICENSE dist/
+          Compress-Archive -Path dist/* -DestinationPath "MRAkdown-$version-win-x64.zip"
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          $notes = @"
+          **Windows:** download ``MRAkdown-$version-win-x64.zip``, unzip it somewhere permanent and run ``MRAkdown.exe``.
+          It needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) and the WebView2
+          Runtime (built into Windows 11). The .exe isn't code-signed, so Windows may warn the first time: choose
+          *More info*, then *Run anyway*; or right-click the zip, choose *Properties* and tick *Unblock* before unzipping.
+
+          **Linux:** build from source with ``packaging/linux/install.sh`` (see the README).
+          "@
+          gh release create '${{ github.ref_name }}' "MRAkdown-$version-win-x64.zip" `
+            --title "MRAkdown $version" --notes $notes

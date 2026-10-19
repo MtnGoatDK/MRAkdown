@@ -44,28 +44,32 @@ the WebView2 runtime that shows the page follows Microsoft's own settings for di
 
 ## Install
 
-There are no ready-made downloads: build it from source as below. You need the
-[.NET 10 SDK](https://dotnet.microsoft.com/download). Comparing with git commits also needs
-[git](https://git-scm.com/), on the `PATH`.
+Comparing with git commits needs [git](https://git-scm.com/), on the `PATH`.
 
 ### Windows
 
-Needs the .NET 10 Desktop Runtime and the WebView2 Runtime (built into Windows 11; on Windows 10, install it from
-Microsoft if it's missing).
+Download `MRAkdown-…-win-x64.zip` from the [latest release](https://github.com/MtnGoatDK/MRAkdown/releases/latest),
+unzip it somewhere permanent and run `MRAkdown.exe`. It needs the
+[.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) and the WebView2 Runtime (built into
+Windows 11; on Windows 10, install it from Microsoft if it's missing). The `.exe` isn't code-signed, so Windows may warn
+the first time you run it: choose "More info", then "Run anyway" (or right-click the zip, choose Properties and tick
+"Unblock" before unzipping). To open Markdown files with it by double-clicking, choose it under "Open with" in Explorer.
+
+To build it yourself instead, you need the [.NET 10 SDK](https://dotnet.microsoft.com/download):
 
 ```powershell
 dotnet publish src\MRAkdown.Windows -c Release -o publish
 ```
 
-This builds `publish\MRAkdown.exe`. To open Markdown files with it by double-clicking, choose it under "Open with" in
-Explorer.
+This builds `publish\MRAkdown.exe`.
 
 There is no separate title bar: the tab bar takes its place. Drag its empty part (or the folder name above the
 sidebar) to move the window; double-click it to maximize, right-click it for the window menu. Snapping and resizing
 from every edge work as usual. Hovering the maximize button doesn't show the Snap Layouts menu; `Win+Z` does.
 
-A single small `.exe` for sharing (without ReadyToRun, which crashes combined with single-file on installed .NET); the
-computer it runs on needs the same .NET and WebView2 runtimes:
+The release download is a single small `.exe`, built by `.github/workflows/release.yml` when a version tag such as
+`v1.0.0` is pushed. The same build locally (without ReadyToRun, which crashes combined with single-file on installed
+.NET):
 
 ```powershell
 dotnet publish src\MRAkdown.Windows -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=false -p:DebugType=none -o share
