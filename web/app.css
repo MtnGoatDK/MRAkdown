@@ -407,6 +407,38 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
 .tabbar .window-controls.left { display: none; margin-right: 4px; }
 body.side-hidden .tabbar .window-controls.left { display: flex; }
 .tabbar .window-controls.right { margin-left: 6px; }
+.window-maximize .icon-restore, body.window-maximized .window-maximize .icon-maximize { display: none; }
+body.window-maximized .window-maximize .icon-restore { display: contents; }
+.window-maximize .icon-maximize { display: contents; }
+
+/* Windows: the top bar is the title bar. Its empty parts drag the window (WebView2 handles app-region like a
+   title bar: double-click maximizes, right-click opens the window menu); everything you can click opts out. */
+.native-titlebar .tabbar,
+.native-titlebar .tabs,
+.native-titlebar .side-head { -webkit-app-region: drag; app-region: drag; }
+.native-titlebar .tabbar button,
+.native-titlebar .tab,
+.native-titlebar .side-head button,
+.native-titlebar .toolbar,
+.native-titlebar .window-controls,
+.native-titlebar .context-menu,
+.native-titlebar [role="dialog"],
+.native-titlebar input,
+.native-titlebar select { -webkit-app-region: no-drag; app-region: no-drag; }
+/* Windows 11-style window buttons: full bar height at the right edge, close turns red */
+.native-titlebar .tabbar .window-controls.right { align-self: stretch; align-items: stretch; gap: 0; margin: 0 -10px 0 6px; }
+.native-titlebar .window-controls button {
+  width: 46px;
+  height: auto;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+}
+.native-titlebar .window-controls button:hover { background: var(--hover); }
+.native-titlebar .window-controls .window-close:hover { background: #c42b1c; color: #fff; }
 
 #show-side { display: none; align-self: center; }
 body.side-hidden #show-side { display: flex; }

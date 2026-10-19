@@ -1808,15 +1808,20 @@ function toggleSidebar() {
 }
 for (const btn of document.querySelectorAll('.toggle-side')) btn.onclick = toggleSidebar;
 
-/* ---------- Window title bar (Linux) ---------- */
+/* ---------- Window title bar (Linux and Windows) ---------- */
 
-// The Linux host shows no title bar. It sets hostWindowControls ({ left, right }: lists of 'minimize', 'maximize'
-// and 'close' from the desktop's button layout), and the top of the page does a title bar's job instead.
+// The host shows no title bar. It sets hostWindowControls ({ left, right }: lists of 'minimize', 'maximize' and
+// 'close'; on Linux from the desktop's button layout), and the top of the page does a title bar's job instead.
+// On Windows (nativeDrag) the empty parts of the bar are CSS drag regions that WebView2 handles like a real title
+// bar; on Linux the page reports drags and clicks to the host below.
 if (window.hostWindowControls) {
+  const svg = (paths) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
   const ICONS = {
-    minimize: '<path d="M6 12h12"/>',
-    maximize: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
-    close: '<path d="M17 7 7 17"/><path d="m7 7 10 10"/>',
+    minimize: svg('<path d="M6 12h12"/>'),
+    // Both icons; CSS shows "restore" while the window is maximized (see the windowState message).
+    maximize: `<span class="icon-maximize">${svg('<rect x="6" y="6" width="12" height="12" rx="1.5"/>')}</span>`
+      + `<span class="icon-restore">${svg('<rect x="5" y="8" width="11" height="11" rx="1.5"/><path d="M8 8V6.5A1.5 1.5 0 0 1 9.5 5h8A1.5 1.5 0 0 1 19 6.5v8a1.5 1.5 0 0 1-1.5 1.5H16"/>')}</span>`,
+    close: svg('<path d="M17 7 7 17"/><path d="m7 7 10 10"/>'),
   };
   const TITLES = { minimize: 'Minimize', maximize: 'Maximize', close: 'Close' };
   const controls = (buttons, side) => {
@@ -1824,14 +1829,16 @@ if (window.hostWindowControls) {
     group.className = `window-controls ${side}`;
     for (const name of buttons) {
       const btn = document.createElement('button');
+      btn.className = `window-${name}`;
       btn.title = TITLES[name];
       btn.setAttribute('aria-label', TITLES[name]);
-      btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+      btn.innerHTML = ICONS[name];
       btn.onclick = () => post({ type: name === 'close' ? 'closeWindow' : name });
       group.append(btn);
     }
     return group;
   };
+  if (window.hostWindowControls.nativeDrag) document.body.classList.add('native-titlebar');
   const { left, right } = window.hostWindowControls;
   // Buttons on the left sit in the folder panel's header, or in the first tab bar while the panel is hidden;
   // buttons on the right at the end of the last tab bar (see layoutPanes).
@@ -1842,9 +1849,9 @@ if (window.hostWindowControls) {
   if (right.length) windowButtons.right = controls(right, 'right');
 
   // The empty parts of the top bar: dragging them moves the window, and double, middle and right clicks do what
-  // the desktop does for title bars.
+  // the desktop does for title bars. (Not needed with native drag regions.)
   const isEmptyBar = (el) => el.matches('.tabbar, .tabs, .side-head, #root-name, .window-controls');
-  for (const bar of [$('#panes'), $('.side-head')]) {
+  for (const bar of window.hostWindowControls.nativeDrag ? [] : [$('#panes'), $('.side-head')]) {
     bar.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !isEmptyBar(e.target)) return;
       const startX = e.clientX;
@@ -1881,6 +1888,14 @@ if (window.hostWindowControls) {
 hostBridge.addEventListener('message', async (e) => {
   const msg = e.data;
   switch (msg?.type) {
+    case 'windowState':
+      // The maximize button shows "restore" while the window is maximized.
+      document.body.classList.toggle('window-maximized', msg.maximized);
+      document.querySelectorAll('.window-maximize').forEach((b) => {
+        b.title = msg.maximized ? 'Restore' : 'Maximize';
+        b.setAttribute('aria-label', b.title);
+      });
+      break;
     case 'saveAndClose': {
       // The window is closing with unsaved edits; the host closes once we confirm.
       // New notes with text ask Save / Don't save / Cancel first; Cancel keeps the window open.

@@ -60,6 +60,10 @@ dotnet publish src\MRAkdown.Windows -c Release -o publish
 This builds `publish\MRAkdown.exe`. To open Markdown files with it by double-clicking, choose it under "Open with" in
 Explorer.
 
+There is no separate title bar: the tab bar takes its place. Drag its empty part (or the folder name above the
+sidebar) to move the window; double-click it to maximize, right-click it for the window menu. Snapping and resizing
+from every edge work as usual. Hovering the maximize button doesn't show the Snap Layouts menu; `Win+Z` does.
+
 A single small `.exe` for sharing (without ReadyToRun, which crashes combined with single-file on installed .NET); the
 computer it runs on needs the same .NET and WebView2 runtimes:
 
@@ -85,9 +89,9 @@ your `PATH`). To update, close MRAkdown and run the install script again.
 
 Differences from Windows:
 
-- There is no separate title bar: drag the empty part of the top bar to move the window. Double, middle and right
-  clicks there do what your desktop does for title bars (on Windows, double-clicking the empty tab strip opens a new
-  tab), and the window buttons follow the desktop's button layout.
+- As on Windows, there is no separate title bar: drag the empty part of the top bar to move the window. Double, middle
+  and right clicks there do what your desktop does for title bars, and the window buttons follow the desktop's button
+  layout.
 - Wayland doesn't tell apps where windows are, so dropping a tab onto another window relies on that window noticing
   the pointer entering it, and new windows open where the desktop puts them.
 - If pages render blank or with glitches on NVIDIA graphics, try starting it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`.

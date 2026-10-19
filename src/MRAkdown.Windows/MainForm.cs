@@ -12,7 +12,7 @@ namespace MRAkdown;
 /// One window: a WebView2 page with tabs. Notes are served from <see cref="Roots"/> under
 /// /f/{root id}/..., so tabs can show notes from different folders.
 /// </summary>
-sealed class MainForm : Form
+sealed partial class MainForm : Form
 {
     const string Origin = "https://notes.local";
 
@@ -38,7 +38,9 @@ sealed class MainForm : Form
         Size = new Size(1200, 800);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-        BackColor = _web.DefaultBackgroundColor = IsDarkMode() ? Color.FromArgb(30, 30, 30) : Color.White;
+        _web.DefaultBackgroundColor = IsDarkMode() ? Color.FromArgb(30, 30, 30) : Color.White;
+        // Shows in the thin resize strip above the page, so it matches the tab bar (--bg-side in app.css).
+        BackColor = IsDarkMode() ? Color.FromArgb(38, 38, 38) : Color.FromArgb(246, 246, 246);
         Controls.Add(_web);
 
         Roots.Changed += OnRootChanged;
@@ -88,6 +90,7 @@ sealed class MainForm : Form
         core.Settings.IsStatusBarEnabled = false;
         // Content is served locally; SmartScreen's online lookup of notes.local stalls each page load by ~2 s.
         core.Settings.IsReputationCheckingRequired = false;
+        await InitTitleBarAsync(core);
         core.AddWebResourceRequestedFilter(Origin + "/*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += OnWebResourceRequested;
         core.WebMessageReceived += OnWebMessage;
@@ -199,6 +202,14 @@ sealed class MainForm : Form
                 _pageReady = true;
                 foreach (var pending in _pendingMessages) PostToPage(pending);
                 _pendingMessages.Clear();
+                if (_maximized) PostToPage(new { type = "windowState", maximized = true });
+                break;
+            // The page's window buttons (see MainForm.TitleBar.cs)
+            case "minimize":
+                WindowState = FormWindowState.Minimized;
+                break;
+            case "maximize":
+                ToggleMaximized();
                 break;
             case "openFolder":
                 if (PickFolder() is { } root) OpenFolderInTab(root);
@@ -391,6 +402,7 @@ sealed class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        ApplyFrame();
         if (IsDarkMode())
         {
             var on = 1;
