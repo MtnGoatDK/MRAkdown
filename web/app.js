@@ -1619,16 +1619,18 @@ const ACTIONS = [
   },
   { id: 'closeWindow', group: 'Tabs and windows', label: 'Close window', keys: ['Ctrl+Shift+W'], run: () => post({ type: 'closeWindow' }) },
   {
-    id: 'toggleEdit', group: 'View', label: 'Edit mode on or off', keys: ['Ctrl+E'],
-    run: () => setViewMode(activePane, activePane.mode !== 'read' ? 'read' : 'edit'),
+    // Edit is the 'live' mode (edit it as it looks), Source the 'edit' mode (the plain text); see app.html
+    // Each switches to its mode, or back to Read when that mode is already on
+    id: 'toggleLive', group: 'View', label: 'Edit mode on or off', keys: ['Ctrl+E'],
+    run: () => setViewMode(activePane, activePane.mode === 'live' ? 'read' : 'live'),
   },
   {
-    id: 'toggleSplit', group: 'View', label: 'Split mode on or off', keys: ['Ctrl+Shift+E'],
-    run: () => setViewMode(activePane, activePane.mode !== 'read' ? 'read' : 'split'),
+    id: 'toggleEdit', group: 'View', label: 'Source mode (the plain text) on or off', keys: ['Ctrl+U'],
+    run: () => setViewMode(activePane, activePane.mode === 'edit' ? 'read' : 'edit'),
   },
   {
-    id: 'toggleLive', group: 'View', label: 'Live mode on or off', keys: ['Ctrl+Shift+L'],
-    run: () => setViewMode(activePane, activePane.mode !== 'read' ? 'read' : 'live'),
+    id: 'toggleSplit', group: 'View', label: 'Split mode (source and preview) on or off', keys: ['Ctrl+Shift+E'],
+    run: () => setViewMode(activePane, activePane.mode === 'split' ? 'read' : 'split'),
   },
   { id: 'toggleSidebar', group: 'View', label: 'Show or hide the folder panel', keys: ['Ctrl+\\'], run: () => toggleSidebar() },
   {

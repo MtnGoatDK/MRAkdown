@@ -16,17 +16,18 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 - **Folder sidebar** with search by file name and path. Opening a file shows its nearest `.obsidian` or `.git`
   folder, or else its own folder. Choose whether the sidebar lists Markdown files only, also files with a viewer of
   their own, or all files; hidden files and folders and `node_modules` are left out.
-- **Read, Live, Edit and Split** modes, with a formatting toolbar. **Live** edits a Markdown file while it looks as it
-  does when read: headings, emphasis, links, images, lists, task checkboxes, quotes, callouts, code blocks and tables
-  show formatted, and the line the cursor is on (or the table it's in) shows its Markdown. The file stays exactly the
-  text you type. For JSON and XML files, Live edits the text while it looks like the Read view's tree (the same
-  colours, collapsible branches with their size shown, guide lines per level), with JSON syntax errors marked as you
-  type. Format spreads a file that's all on one line (minified JSON or XML) over indented lines without changing any
-  value or text, and saving puts it back on one line; JSON can be formatted any time, and right-clicking a branch puts
-  just that object or array on one line or spreads it out. Very long lines show only their start, and lines over
-  500,000 characters (such as embedded images) are read-only in Live; for CSV and TSV files it's the Read view's table, editable, where you can add and remove rows and columns, and
-  only the cells you change are rewritten in the file. **Split** shows the text and a live preview side by side. Pasted or dropped images are saved in an
-  `attachments` folder next to the file.
+- **Read, Edit, Source and Split** modes, with a formatting toolbar. **Edit** changes a Markdown file while it looks
+  as it does when read: headings, emphasis, links, images, lists, task checkboxes, quotes, callouts, code blocks and
+  tables show formatted, and the line the cursor is on (or the table it's in) shows its Markdown. The file stays
+  exactly the text you type. For JSON and XML files, Edit changes the text while it looks like the Read view's tree
+  (the same colours, collapsible branches with their size shown, guide lines per level), with JSON syntax errors marked
+  as you type. Format spreads a file that's all on one line (minified JSON or XML) over indented lines without
+  changing any value or text, and saving puts it back on one line; JSON can be formatted any time, and right-clicking
+  a branch puts just that object or array on one line or spreads it out. Very long lines show only their start, and
+  lines over 500,000 characters (such as embedded images) are read-only in Edit. For CSV and TSV files Edit is the Read
+  view's table, editable, where you can add and remove rows and columns, and only the cells you change are rewritten in
+  the file. **Source** shows the plain text, every character as it is; **Split** shows the source and a preview side by
+  side. Pasted or dropped images are saved in an `attachments` folder next to the file.
 - **Saving when you choose:** a tab keeps its unsaved edits (marked with a dot) until you save them with `Ctrl+S`,
   also while you look at other tabs. You're asked Save / Don't save / Cancel before they'd be lost: closing the tab or
   window, or opening another file in it. Turn on "Save automatically" in Settings to have edits saved whenever you
@@ -136,7 +137,7 @@ buttons can't).
 | `Ctrl+N` / `Ctrl+Shift+N` | New file / new window |
 | `Ctrl+O` / `Ctrl+Shift+O` | Open file / open folder |
 | `Ctrl+S` | Save (asks where, for a new file) |
-| `Ctrl+E` / `Ctrl+Shift+E` / `Ctrl+Shift+L` | Toggle Edit / Split / Live mode |
+| `Ctrl+E` / `Ctrl+U` / `Ctrl+Shift+E` | Toggle Edit / Source / Split mode |
 | `Ctrl+P` | Search files (`Enter` opens the first match, `Esc` clears) |
 | `Ctrl+T` (or the + after the tabs), `Ctrl+W`, `Ctrl+Shift+T` | New, close, reopen tab |
 | `Ctrl+Tab`, `Ctrl+Shift+Tab`, `Ctrl+PageDown`, `Ctrl+PageUp` | Next / previous tab |

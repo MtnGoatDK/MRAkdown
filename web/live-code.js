@@ -452,7 +452,8 @@ export function createCodeSurface(parent, host) {
     indentOnInput(),
     bracketMatching(),
     closeBrackets(),
-    keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, indentWithTab]),
+    // Without CodeMirror's Ctrl+U (undo selection): Ctrl+U is the app's Source mode
+    keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap.filter((b) => !/^Mod-(Shift-)?u$/.test(b.key)), ...foldKeymap, indentWithTab]),
     syntaxHighlighting(codeStyle),
     KINDS[kind].language(),
     lockLongLines,

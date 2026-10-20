@@ -429,7 +429,8 @@ export function createLiveSurface(parent, host) {
 
   const extensions = () => [
     history(),
-    keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+    // Without CodeMirror's Ctrl+U (undo selection): Ctrl+U is the app's Source mode
+    keymap.of([...defaultKeymap, ...historyKeymap.filter((b) => !/^Mod-(Shift-)?u$/.test(b.key)), indentWithTab]),
     markdown({ base: markdownLanguage }),
     syntaxHighlighting(markdownStyle),
     EditorView.lineWrapping,
