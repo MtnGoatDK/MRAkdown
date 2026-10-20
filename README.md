@@ -21,7 +21,7 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 **Other files**
 
 - JSON and XML as trees and CSV/TSV as tables, editable as they look
-- Text, logs and code, with no size limit: big files open read-only
+- Text, logs and code, even very large ones (tested with a 784 MB log): files over 20 MB open read-only
 - Stays quick with long files: tables and text only draw what's on screen
 
 **Folders and files**
@@ -58,12 +58,8 @@ dotnet publish src\MRAkdown.Windows -c Release -o publish
 
 This builds `publish\MRAkdown.exe`.
 
-There is no separate title bar: the tab bar takes its place. Drag its empty part (or the folder name above the
-sidebar) to move the window; double-click it to maximize, right-click it for the window menu. Snapping and resizing
-from every edge work as usual. Hovering the maximize button doesn't show the Snap Layouts menu; `Win+Z` does.
-
-The release download is a single small `.exe`, built by `.github/workflows/release.yml` when a version tag such as
-`v1.0.0` is pushed. The same build locally (without ReadyToRun, which crashes combined with single-file on installed
+The release zip holds a single small `.exe` (and the license), built by `.github/workflows/release.yml` when a version
+tag such as `v1.0.0` is pushed. The same build locally (without ReadyToRun, which crashes combined with single-file on installed
 .NET):
 
 ```powershell
@@ -109,7 +105,7 @@ Differences from Windows:
 - **JSON and XML** in Edit look like the Read view's tree: the same colours, collapsible branches with their size
   shown, guide lines per level. JSON syntax errors are marked as you type. A file that's all on one line (minified)
   opens spread over indented lines without changing any value or text, and saving puts it back on one line (Source
-  shows it as it is on disk). Format lays out JSON in a layout of its own again, and right-clicking a branch puts
+  shows it as it is on disk). Format re-indents the whole JSON file, and right-clicking a branch puts
   just that object or array on one line or spreads it out. Very long lines show only their start, and lines over
   500,000 characters (such as embedded images) are read-only.
 - **CSV and TSV** in Edit are the Read view's table, editable: add and remove rows and columns; only the cells you
@@ -166,6 +162,13 @@ start, earlier, later and the end.
 - Comparisons show the two side by side, with changed lines and words highlighted and unchanged stretches folded away.
   They use the files as saved, and ignore differences in line endings alone.
 
+### The window
+
+There is no separate title bar: the tab bar takes its place. Drag its empty part (or the folder name above the
+sidebar) to move the window; double-click it to maximize, right-click it for the window menu. Snapping and resizing
+from every edge work as usual. On Windows, hovering the maximize button doesn't show the Snap Layouts menu; `Win+Z`
+does. On Linux, see [Differences from Windows](#linux).
+
 ### Keyboard shortcuts
 
 These are the defaults. All keys except `Ctrl+1…9` can be changed in Settings, under "Change shortcuts…" (the mouse
@@ -176,7 +179,7 @@ buttons can't).
 | `Ctrl+N` / `Ctrl+Shift+N` | New file / new window |
 | `Ctrl+O` / `Ctrl+Shift+O` | Open file / open folder |
 | `Ctrl+S` | Save (asks where, for a new file) |
-| `F2` | Rename the file (or click its title, or right-click its tab or its entry in the folder panel) |
+| `F2` | Rename the file (or click its title, or right-click its tab or its entry in the sidebar) |
 | `Ctrl+E` / `Ctrl+U` / `Ctrl+Shift+E` | Toggle Edit / Source / Split mode |
 | `Ctrl+P` | Search files (`Enter` opens the first match, `Esc` clears) |
 | `Ctrl+T` (or the + after the tabs), `Ctrl+W`, `Ctrl+Shift+T` | New, close, reopen tab |
@@ -185,7 +188,7 @@ buttons can't).
 | `Alt+←` / `Alt+→`, mouse back / forward | Back / forward |
 | `F5` or `Ctrl+R` | Reload the file and folder |
 | `F7` / `Shift+F7` | Next / previous change, in a comparison |
-| `Ctrl+\` | Show or hide the folder panel |
+| `Ctrl+\` | Show or hide the sidebar |
 | `Ctrl+Shift+W` | Close the window |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / italic / link, while editing a Markdown file |
 
