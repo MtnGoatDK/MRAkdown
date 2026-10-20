@@ -45,6 +45,7 @@ const OPEN_BUDGET_MS = 150;
 const BUTTON_BUDGET_MS = 5000;
 // Files bigger than this can't be read in OPEN_BUDGET_MS anyway (about 10 MB/s), so they don't try
 const OPEN_FOLD_MAX = 1_500_000;
+const WRAP_MAX_LINE = 10_000;
 
 const JSON_VALUES = new Set(['Object', 'Array', 'String', 'Number', 'True', 'False', 'Null']);
 const XML_CHILDREN = new Set(['Element', 'Comment', 'Cdata', 'ProcessingInst']);
@@ -93,12 +94,15 @@ class Toggle extends WidgetType {
   ignoreEvent() { return false; }
 }
 
-/** The file name and summary bar above the text, as in the Read view; scrolls with the text. */
-class Header extends WidgetType {
-  constructor(el) { super(); this.el = el; }
-  eq() { return true; }
-  toDOM() { return this.el; }
-  ignoreEvent() { return true; }
+/** The length of a text's longest line. */
+function longestLine(text) {
+  let max = 0;
+  for (let start = 0; ;) {
+    const end = text.indexOf('\n', start);
+    max = Math.max(max, (end === -1 ? text.length : end) - start);
+    if (end === -1) return max;
+    start = end + 1;
+  }
 }
 
 /** The indentation unit of a file (spaces per level): the smallest indentation in its first lines. */
@@ -121,8 +125,10 @@ export function createCodeSurface(parent, host) {
   let disabled = true;
   let kind = 'json';
   let unit = 2;
+  let wrap = true;
 
-  // Our own element around the editor, for the classes editor.js sets (which surface is in use)
+  // Our own element around the editor, for the classes editor.js sets (which surface is in use). It scrolls, with
+  // the file name and summary bar above the editor, as in the Read view.
   const root = document.createElement('div');
   root.className = 'live-code-root';
   parent.append(root);
@@ -148,7 +154,7 @@ export function createCodeSurface(parent, host) {
     if (op === 'collapse') collapseFrom(1, BUTTON_BUDGET_MS);
     else if (op === 'expand') unfoldAll(view);
   });
-  const headerDecorations = Decoration.set([Decoration.widget({ widget: new Header(header), block: true, side: -1 }).range(0)]);
+  root.append(header);
 
   // JSON: checked as you type; the same check gives the summary ("Object · 12 keys")
   const jsonLinter = linter((v) => {
@@ -196,7 +202,8 @@ export function createCodeSurface(parent, host) {
           const line = state.doc.lineAt(pos);
           pos = line.to + 1;
           if (line.from < from) continue; // the rest of a line after a collapsed branch
-          const spaces = /^ */.exec(line.text)[0].length;
+          // Only the start of the line: a minified file is one line of millions of characters
+          const spaces = /^ */.exec(state.sliceDoc(line.from, Math.min(line.to, line.from + 1000)))[0].length;
           const level = Math.floor(spaces / unit);
           if (level > 0) ranges.push(Decoration.line({ class: 'cm-tree-line', attributes: { style: `--level: ${level}` } }).range(line.from));
           if (spaces > 0) ranges.push(widen.range(line.from, line.from + spaces));
@@ -256,8 +263,7 @@ export function createCodeSurface(parent, host) {
     kind === 'json' ? jsonLinter : [],
     folding,
     tree,
-    EditorView.decorations.of(headerDecorations),
-    EditorView.lineWrapping,
+    wrap ? EditorView.lineWrapping : [],
     editable.of(EditorView.editable.of(!disabled)),
     // CodeMirror manages its element's classes, so they're given here rather than added afterwards
     EditorView.editorAttributes.of({ class: 'live-editor live-code' }),
@@ -317,6 +323,8 @@ export function createCodeSurface(parent, host) {
       header.querySelector('.inline-title').textContent = host.title();
       setInfo('');
       unit = indentUnit(text);
+      // Long lines wrap, except in files with huge lines (minified files): wrapping those takes seconds
+      wrap = longestLine(text) <= WRAP_MAX_LINE;
       view.setState(EditorState.create({ doc: text, extensions: extensions() }));
       known = { text, doc: view.state.doc };
       // The same levels open as in the Read view (when the file is quick to read; big files start expanded)
@@ -349,9 +357,9 @@ export function createCodeSurface(parent, host) {
       disabled = value;
       view.dispatch({ effects: editable.reconfigure(EditorView.editable.of(!value)) });
     },
-    get scrollTop() { return view.scrollDOM.scrollTop; },
-    set scrollTop(value) { view.scrollDOM.scrollTop = value; },
-    scrollBox: () => view.scrollDOM,
+    get scrollTop() { return root.scrollTop; },
+    set scrollTop(value) { root.scrollTop = value; },
+    scrollBox: () => root,
     on: (type, fn) => view.contentDOM.addEventListener(type, fn),
   };
 }

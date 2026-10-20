@@ -19,10 +19,16 @@
 
 /* JSON and XML (live-code.js): laid out like the JSON and XML viewers in Read mode (viewers.css) */
 .live-editor.live-code .cm-scroller { font: 13px/1.6 "Cascadia Code", Consolas, monospace; font-variant-ligatures: none; }
-.live-editor.live-code .cm-content { max-width: 1100px; padding: 36px 48px 160px; } /* as .pane.plain-file .markdown */
-.live-code-xml .live-editor.live-code .cm-content { max-width: none; } /* XML uses the full width, as in Read mode */
+/* The outer element scrolls (file name and summary bar, then the editor), so the editor is as tall as its text */
+.live-surface.live-code-root { display: block; overflow: auto; background: var(--bg); }
+.live-code-root > .live-editor.live-code { height: auto; }
+.live-editor.live-code .cm-scroller { overflow-x: auto; overflow-y: visible; }
+/* Column as .pane.plain-file .markdown; XML uses the full width, as in Read mode */
+.live-editor.live-code .cm-content, .live-code-head { max-width: 1100px; margin: 0 auto; }
+.live-editor.live-code .cm-content { padding: 0 48px 160px; }
+.live-code-xml .live-editor.live-code .cm-content, .live-code-xml .live-code-head { max-width: none; }
 .live-code-head {
-  padding-bottom: 0.2em;
+  padding: 36px 48px 0.2em;
   font: 16px/1.65 "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   white-space: normal;
   cursor: default;
