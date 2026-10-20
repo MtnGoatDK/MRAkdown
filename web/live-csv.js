@@ -15,7 +15,9 @@ if (!document.querySelector('link[href="/__app/viewers.css"]')) {
 }
 
 const SEPARATOR_NAMES = { ',': 'commas', ';': 'semicolons', '\t': 'tabs', '|': 'pipes' };
-const PAGE_ROWS = 1000;
+// Rows laid out to measure column widths and the row height; rows drawn beyond those in view (see drawRows)
+const MEASURE_ROWS = 1000;
+const OVERSCAN = 30;
 
 /** Picks the separator that occurs most often (outside quotes) in the first lines, as the CSV viewer does. */
 function detectSeparator(text) {
@@ -111,7 +113,6 @@ export function createCsvSurface(parent, host) {
   let endsWithNewline = false;
   let disabled = true;
   let current = { r: 0, c: 0 }; // the cell last edited or focused
-  let shown = 0; // rows rendered so far (big files render in pages)
   const undoStack = [];
   const redoStack = [];
   let typing = false; // edits in one cell, until another cell gets focus, are one undo step
@@ -159,10 +160,11 @@ export function createCsvSurface(parent, host) {
   // (Editable cells always show line breaks, so a cell with them gets its text swapped on entering and leaving.)
   const oneLine = (s) => s.replace(/\n/g, ' ');
 
-  // Numbered as in the CSV viewer: "#" on the header row, data rows from 1
+  // Numbered as in the CSV viewer: "#" on the header row, data rows from 1, every other one shaded
   function rowHtml(row, r, cols, header) {
     const head = header && r === 0;
-    let html = `<tr${head ? ' class="live-csv-head"' : ''}><th class="live-csv-no">${head ? '#' : header ? r : r + 1}</th>`;
+    const no = header ? r : r + 1;
+    let html = `<tr${head ? ' class="live-csv-head"' : no % 2 === 0 ? ' class="alt"' : ''}><th class="live-csv-no">${head ? '#' : no}</th>`;
     for (let c = 0; c < cols; c++) {
       const value = row.cells[c]?.value ?? '';
       const text = escape(oneLine(value));
@@ -172,29 +174,87 @@ export function createCsvSurface(parent, host) {
     return `${html}</tr>`;
   }
 
+  // Only the rows in view (and OVERSCAN around them) are in the page, between two spacers that stand in for the
+  // rest, so a table of any length scrolls and edits quickly. Column widths and the row height are measured once,
+  // on the first MEASURE_ROWS rows laid out by the browser. The header row, if any, is always in the page (sticky).
+  let colCount = 1;
+  let rowHeight = 0; // 0 until the table has been shown (then it's measured)
+  let drawn = { from: 0, to: 0 }; // the rows in the page, besides the header row
+  const firstBodyRow = () => (headerRow() ? 1 : 0);
+
+  /** Lays the table out (a file shown, columns added or removed, undo): measures it, then draws the rows in view. */
   function render(keepFocus = false) {
-    const cols = columns();
-    const upTo = Math.max(PAGE_ROWS, Math.min(rows.length, shown || PAGE_ROWS), current.r + 1);
-    shown = Math.min(rows.length, upTo);
+    colCount = columns();
     const header = headerRow();
     table.classList.toggle('has-head', header);
+    const top = wrap.scrollTop;
     let html = '';
-    for (let r = 0; r < shown; r++) html += rowHtml(rows[r], r, cols, header);
+    for (let r = 0; r < Math.min(rows.length, MEASURE_ROWS); r++) html += rowHtml(rows[r], r, colCount, header);
     tbody.innerHTML = html;
-    wrap.querySelector('.viewer-more')?.remove();
-    if (shown < rows.length) {
-      const more = document.createElement('button');
-      more.type = 'button';
-      more.className = 'viewer-more';
-      more.textContent = `Show ${(rows.length - shown).toLocaleString()} more rows`;
-      more.onclick = () => { shown = rows.length; render(); };
-      wrap.append(more);
-    }
-    const dataRows = headerRow() ? rows.length - 1 : rows.length;
-    info.textContent = `${dataRows.toLocaleString()} rows · ${cols} columns · separated by ${SEPARATOR_NAMES[sep]}`;
+    // The row number column needs room for the highest number, not only those in the first rows
+    const numbered = tbody.rows[header && tbody.rows.length > 1 ? 1 : 0];
+    if (numbered) numbered.cells[0].textContent = String(rows.length);
     fixWidths();
+    rowHeight = tbody.rows[Math.min(firstBodyRow(), tbody.rows.length - 1)]?.getBoundingClientRect().height ?? 0;
+    const dataRows = header ? rows.length - 1 : rows.length;
+    info.textContent = `${dataRows.toLocaleString()} rows · ${colCount} columns · separated by ${SEPARATOR_NAMES[sep]}`;
+    drawRows(true);
+    wrap.scrollTop = top;
+    drawRows();
     if (keepFocus) focusCell(current.r, current.c);
   }
+
+  const spacer = (height) => (height > 0
+    ? `<tr class="live-csv-spacer"><td colspan="${colCount + 1}" style="height:${height}px"></td></tr>` : '');
+
+  /** Draws the rows in view, unless they're drawn already (force: draw anyway). Keeps the cell being edited. */
+  function drawRows(force = false) {
+    if (!rowHeight) return; // not shown yet: render() draws once it is (see the ResizeObserver below)
+    const first = firstBodyRow();
+    const inView = Math.ceil(wrap.clientHeight / rowHeight) + 1;
+    const at = first + Math.floor(wrap.scrollTop / rowHeight);
+    const from = Math.max(first, at - OVERSCAN);
+    const to = Math.min(rows.length, at + inView + OVERSCAN);
+    const wantFrom = Math.max(first, at - 2 * OVERSCAN);
+    const wantTo = Math.min(rows.length, at + inView + 2 * OVERSCAN);
+    // Drawn already (and not far more than needed, as after the view got smaller)
+    if (!force && from >= drawn.from && to <= drawn.to && drawn.to - drawn.from <= 2 * (wantTo - wantFrom)) return;
+
+    const editing = document.activeElement?.closest?.('td[data-r]');
+    const caret = editing && tbody.contains(editing) ? getSelection().focusOffset : null;
+    const header = headerRow();
+    let html = header && rows.length ? rowHtml(rows[0], 0, colCount, true) : '';
+    html += spacer((wantFrom - first) * rowHeight);
+    for (let r = wantFrom; r < wantTo; r++) html += rowHtml(rows[r], r, colCount, header);
+    html += spacer((rows.length - wantTo) * rowHeight);
+    tbody.innerHTML = html;
+    drawn = { from: wantFrom, to: wantTo };
+    // The spacers' heights assume every row is rowHeight high: check it on a drawn row, and draw again if it's off
+    const sample = [...tbody.rows].find((tr) => !tr.classList.contains('live-csv-head') && !tr.classList.contains('live-csv-spacer'));
+    const real = sample?.getBoundingClientRect().height;
+    if (real && Math.abs(real - rowHeight) > 0.5 && !editing) {
+      rowHeight = real;
+      drawRows(true);
+      return;
+    }
+    if (caret !== null) {
+      const td = tbody.querySelector(`td[data-r="${editing.dataset.r}"][data-c="${editing.dataset.c}"]`);
+      if (td) {
+        td.focus();
+        const text = td.firstChild;
+        if (text) getSelection().collapse(text, Math.min(caret, text.length));
+      }
+    }
+  }
+
+  let drawPending = false;
+  wrap.addEventListener('scroll', () => {
+    if (drawPending) return;
+    drawPending = true;
+    requestAnimationFrame(() => { drawPending = false; drawRows(); });
+  });
+  // Measured once the table is shown (it may be laid out while hidden); more rows in view when it grows
+  new ResizeObserver(() => { if (!rowHeight && rows.length) render(); else drawRows(); }).observe(wrap);
 
   // Column widths are measured once with the browser's automatic table layout, then fixed: with automatic layout,
   // every keystroke in a cell makes the browser lay out the whole table again (slow with many rows).
@@ -216,6 +276,11 @@ export function createCsvSurface(parent, host) {
   }
 
   function focusCell(r, c) {
+    // A row out of view isn't in the page: scroll to it first
+    if (rowHeight && !(headerRow() && r === 0) && (r < drawn.from || r >= drawn.to)) {
+      wrap.scrollTop = (r - firstBodyRow()) * rowHeight - wrap.clientHeight / 3;
+      drawRows(true);
+    }
     const td = tbody.querySelector(`td[data-r="${r}"][data-c="${c}"]`);
     if (!td) return;
     td.focus();
@@ -336,13 +401,12 @@ export function createCsvSurface(parent, host) {
     if (!td) return;
     const r = Number(td.dataset.r);
     const c = Number(td.dataset.c);
-    const cols = columns();
+    const cols = colCount;
     if (e.key === 'Tab') {
       // Tab / Shift+Tab: next / previous cell, across rows
       e.preventDefault();
       let next = r * cols + c + (e.shiftKey ? -1 : 1);
       next = Math.max(0, Math.min(rows.length * cols - 1, next));
-      if (Math.floor(next / cols) >= shown) { shown = rows.length; render(); }
       focusCell(Math.floor(next / cols), next % cols);
     } else if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey) {
       // Enter: the cell below (Shift+Enter: a line break in the cell)
@@ -410,7 +474,7 @@ export function createCsvSurface(parent, host) {
       undoStack.length = 0;
       redoStack.length = 0;
       current = { r: 0, c: 0 };
-      shown = 0;
+      wrap.scrollTop = 0;
       typing = false;
       load(text);
     },

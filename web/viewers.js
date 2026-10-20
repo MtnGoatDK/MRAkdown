@@ -43,7 +43,8 @@ const ALL_LEVELS = 1000;
 
 // Children of big JSON/XML nodes and CSV rows are shown in chunks, so huge files stay responsive.
 const CHUNK = 500;
-const CSV_ROWS = 1000;
+const CSV_ROWS = 1000; // CSV: rows laid out to measure the table (see csvViewer)
+const CSV_OVERSCAN = 30;
 const TEXT_LINES = 20000;
 
 /**
@@ -368,25 +369,74 @@ function csvViewer(ctx) {
   const tbody = document.createElement('tbody');
   table.append(tbody);
 
-  let shown = 0;
-  const showRows = (upTo) => {
-    const end = Math.min(order.length, upTo);
-    let html = '';
-    for (let n = shown; n < end; n++) {
-      const r = data[order[n]];
-      html += `<tr><td class="csv-no">${order[n] + 1}</td>`;
-      for (let c = 0; c < columns; c++) {
-        const v = r[c] ?? '';
-        html += `<td${Number.isNaN(numberValue(v)) ? '' : ' class="csv-num"'}>${esc(v)}</td>`;
-      }
-      html += '</tr>';
+  // Only the rows in view (and CSV_OVERSCAN around them) are in the page, between two spacers that stand in for the
+  // rest, so a table of any length scrolls quickly. Column widths and the row height are measured once, on the first
+  // CSV_ROWS rows laid out by the browser.
+  const rowHtml = (n) => {
+    const r = data[order[n]];
+    let html = `<tr${n % 2 ? ' class="alt"' : ''}><td class="csv-no">${order[n] + 1}</td>`;
+    for (let c = 0; c < columns; c++) {
+      const v = r[c] ?? '';
+      html += `<td${Number.isNaN(numberValue(v)) ? '' : ' class="csv-num"'}>${esc(v)}</td>`;
     }
-    tbody.insertAdjacentHTML('beforeend', html);
-    shown = end;
-    wrap.querySelector('.viewer-more')?.remove();
-    if (shown < order.length) wrap.append(moreButton(order.length - shown, () => showRows(order.length)));
+    return `${html}</tr>`;
   };
+  const spacer = (height) => (height > 0 ? `<tr class="csv-spacer"><td colspan="${columns + 1}" style="height:${height}px"></td></tr>` : '');
+  let rowHeight = 0;
+  let drawn = { from: 0, to: 0 };
 
+  /** Lays out the first rows to measure column widths and the row height, then draws the rows in view. */
+  function measure() {
+    let html = '';
+    for (let n = 0; n < Math.min(order.length, CSV_ROWS); n++) html += rowHtml(n);
+    tbody.innerHTML = html;
+    // The row number column needs room for the highest number, not only those in the first rows
+    if (tbody.rows[0]) tbody.rows[0].cells[0].textContent = String(order.length);
+    const widths = [...headRow.cells].map((cell) => Math.ceil(cell.getBoundingClientRect().width) + 1);
+    if (!widths.some((w) => w > 1)) return; // not shown yet
+    const colgroup = document.createElement('colgroup');
+    for (const w of widths) colgroup.insertAdjacentHTML('beforeend', `<col style="width:${w}px">`);
+    table.querySelector('colgroup')?.remove();
+    table.prepend(colgroup);
+    table.style.width = `${widths.reduce((a, b) => a + b, 0)}px`;
+    table.style.tableLayout = 'fixed';
+    // With the widths fixed, every row is one line high
+    rowHeight = tbody.rows[0]?.getBoundingClientRect().height ?? 0;
+    drawRows(true);
+  }
+
+  /** Draws the rows in view, unless they're drawn already (force: draw anyway). */
+  function drawRows(force = false) {
+    if (!rowHeight) return;
+    const inView = Math.ceil(wrap.clientHeight / rowHeight) + 1;
+    const at = Math.floor(wrap.scrollTop / rowHeight);
+    const from = Math.max(0, at - CSV_OVERSCAN);
+    const to = Math.min(order.length, at + inView + CSV_OVERSCAN);
+    const wantFrom = Math.max(0, at - 2 * CSV_OVERSCAN);
+    const wantTo = Math.min(order.length, at + inView + 2 * CSV_OVERSCAN);
+    // Drawn already (and not far more than needed, as after the view got smaller)
+    if (!force && from >= drawn.from && to <= drawn.to && drawn.to - drawn.from <= 2 * (wantTo - wantFrom)) return;
+    let html = spacer(wantFrom * rowHeight);
+    for (let n = wantFrom; n < wantTo; n++) html += rowHtml(n);
+    tbody.innerHTML = html + spacer((order.length - wantTo) * rowHeight);
+    drawn = { from: wantFrom, to: wantTo };
+    // The spacers' heights assume every row is rowHeight high: check it on a drawn row (it can be measured before
+    // the layout is final), and draw again with the real height if it's off
+    const real = tbody.rows[wantFrom > 0 ? 1 : 0]?.getBoundingClientRect().height;
+    if (real && Math.abs(real - rowHeight) > 0.5) {
+      rowHeight = real;
+      drawRows(true);
+    }
+  }
+
+  let drawPending = false;
+  wrap.addEventListener('scroll', () => {
+    if (drawPending) return;
+    drawPending = true;
+    requestAnimationFrame(() => { drawPending = false; drawRows(); });
+  });
+  // Measured once the table is shown (it may be laid out while hidden); more rows in view when it grows
+  new ResizeObserver(() => { if (!rowHeight) measure(); else drawRows(); }).observe(wrap);
   function sortBy(col) {
     sort = { col, dir: sort.col === col ? -sort.dir : 1 };
     const values = data.map((r) => r[col] ?? '');
@@ -402,13 +452,10 @@ function csvViewer(ctx) {
     headRow.querySelectorAll('.csv-sort').forEach((s, i) => {
       s.textContent = i === col ? (sort.dir > 0 ? ' ▲' : ' ▼') : '';
     });
-    tbody.replaceChildren();
-    const keep = Math.max(shown, CSV_ROWS);
-    shown = 0;
-    showRows(keep);
+    drawRows(true);
   }
 
-  showRows(CSV_ROWS);
+  measure();
 }
 
 /* ---------- XML ---------- */

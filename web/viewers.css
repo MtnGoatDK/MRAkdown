@@ -113,7 +113,11 @@
 }
 .csv-table th button:hover { background: var(--hover); }
 .csv-sort { color: var(--accent); }
-.csv-table tbody tr:nth-child(even) { background: var(--hover); }
+/* Every other row shaded (by position: only the rows in view are in the page, see csvViewer) */
+.csv-table tbody tr.alt { background: var(--hover); }
+.csv-table .csv-spacer td { padding: 0; border: 0; }
+/* Column widths are measured on the first rows; a longer value further down is cut off */
+.csv-table td { overflow: hidden; text-overflow: ellipsis; }
 .csv-table .csv-no { color: var(--faint); text-align: right; font-variant-numeric: tabular-nums; }
 .csv-table thead .csv-no { padding: 6px 12px; }
 .csv-table .csv-num { text-align: right; font-variant-numeric: tabular-nums; }
