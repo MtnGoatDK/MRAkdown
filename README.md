@@ -11,51 +11,27 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 
 ## Features
 
-- **Reading view:** `[[wikilinks]]` (also to headings and with aliases) and callouts as in Obsidian, plus
-  highlights, task lists, tables, footnotes, embedded images and syntax-highlighted code
-- **Folder sidebar** with search by file name and path. Opening a file shows its nearest `.obsidian` or `.git`
-  folder, or else its own folder. Choose whether the sidebar lists Markdown files only, also files with a viewer of
-  their own, or all files; hidden files and folders and `node_modules` are left out.
-- **Read, Edit, Source and Split** modes, with a formatting toolbar. **Edit** changes a Markdown file while it looks
-  as it does when read: headings, emphasis, links, images, lists, task checkboxes, quotes, callouts, code blocks and
-  tables show formatted, and the line the cursor is on (or the table it's in) shows its Markdown. The file stays
-  exactly the text you type. For JSON and XML files, Edit changes the text while it looks like the Read view's tree
-  (the same colours, collapsible branches with their size shown, guide lines per level), with JSON syntax errors marked
-  as you type. A file that's all on one line (minified JSON or XML) opens spread over indented lines, without
-  changing any value or text, and saving puts it back on one line (Source shows it as it is on disk). JSON in a layout
-  of its own can be laid out again with Format, and right-clicking a branch puts just that object or array on one line
-  or spreads it out. Very long lines show only their start, and lines over 500,000 characters (such as embedded
-  images) are read-only in Edit. For CSV and TSV files Edit is the Read
-  view's table, editable, where you can add and remove rows and columns, and only the cells you change are rewritten in
-  the file. **Source** shows the plain text, every character as it is; **Split** shows the source and a preview side by
-  side. Pasted or dropped images are saved in an `attachments` folder next to the file.
-- **Saving when you choose:** a tab keeps its unsaved edits (marked with a dot) until you save them with `Ctrl+S`,
-  also while you look at other tabs. You're asked Save / Don't save / Cancel before they'd be lost: closing the tab or
-  window, or opening another file in it. Turn on "Save automatically" in Settings to have edits saved whenever you
-  switch to another file, tab or mode instead. A new file asks where to save it the first time.
-- **Follows changes from other programs:** when a file you have open changes on disk (another editor, `git pull`), it
-  shows the new version right away, and the folder list updates too. If you have unsaved edits in it, Settings decides:
-  **Ask me** (default) keeps both when the changes are on different lines, and otherwise lets you compare, keep yours,
-  save yours as a copy or reload; **Keep mine** leaves your edits (saving asks before overwriting the new version);
-  **Take new** saves your edits as a copy next to the file and shows the new version.
-- **Rename a file** by clicking its title above the text, with `F2`, or from its tab's or sidebar entry's right-click
-  menu; open tabs, their history and unsaved edits follow it
-- **Tabs** with their own back/forward history; drag tabs to reorder them, into a new window, or onto another window
-- **Two panes side by side**, each with its own tabs and mode: "Open to the side" from a file, link or tab menu, or
-  drag a tab onto the right half of the page
-- **Compare files** side by side, with changed lines and words highlighted and unchanged stretches folded: two files,
-  or a file with its last git commit or any earlier commit
-- **Other files open too:** JSON, CSV/TSV and XML in viewers of their own; `.txt`, `.log` and files without an extension
-  as plain text; other text files as code ("View as" picks another viewer, remembered per file type). Long files stay
-  quick: tables and text only draw the rows near the view, and big JSON or XML branches add their items as you scroll.
-  Text files over 20 MB (big logs) open read-only, read from disk in parts as you scroll, whatever their size; one with
-  more lines than a page can hold (about a million) is shown in parts, with buttons for the start, earlier, later and
-  the end
-- **Keeps each file's encoding** (UTF-8, UTF-16, Windows-1252) and line endings (CRLF or LF) when saving. A
-  Windows-1252 file that gets characters it can't hold, such as emoji, is saved as UTF-8 instead.
-- **One running instance:** opening more files adds tabs to the window you used last
-- **Settings** (the gear button): theme (system, light or dark), accent colour, automatic saving, what to do when a
-  file you're editing changes on disk, and keyboard shortcuts
+**Notes**
+
+- Reads Obsidian notes: `[[wikilinks]]`, callouts, highlights, task lists, tables, footnotes, images and highlighted code
+- **Edit** a note while it looks as it does when read, or switch to the plain **Source**, or **Split** with a preview
+- A formatting toolbar; pasted or dropped images are saved next to the note
+- Rename a file right from its title, its tab or the sidebar
+
+**Other files**
+
+- JSON and XML as trees and CSV/TSV as tables, editable as they look
+- Text, logs and code, with no size limit: big files open read-only
+- Stays quick with long files: tables and text only draw what's on screen
+
+**Folders and files**
+
+- No vault: double-click a file and its folder becomes the sidebar, with search
+- Tabs with back and forward, two panes side by side, more windows
+- Compare two files, or a file with any earlier git commit
+- Follows changes made by other programs, without losing your unsaved edits
+- Saves when you choose (or automatically), keeping each file's encoding and line endings
+- Light, dark or system theme, an accent colour, and keyboard shortcuts you can change
 
 MRAkdown has no account and no telemetry of its own; your files are only read and written on your own computer. Web
 links open in your browser, and images that a note embeds from the web load as they would in a browser. (On Windows,
@@ -121,8 +97,64 @@ Differences from Windows:
 
 ## Using it
 
-### Panes and comparisons
+### Modes and editing
 
+- **Read** shows a note as it's meant to look; Obsidian's `[[wikilinks]]` work also to headings (`[[Note#Heading]]`)
+  and with aliases (`[[Note|text]]`).
+- **Edit** changes a Markdown file while it looks as it does when read: headings, emphasis, links, images, lists, task
+  checkboxes, quotes, callouts, code blocks and tables show formatted, and the line the cursor is on (or the table
+  it's in) shows its Markdown. The file stays exactly the text you type.
+- **Source** shows the plain text, every character as it is; **Split** shows the source and a preview side by side.
+- Pasted or dropped images are saved in an `attachments` folder next to the file.
+- **JSON and XML** in Edit look like the Read view's tree: the same colours, collapsible branches with their size
+  shown, guide lines per level. JSON syntax errors are marked as you type. A file that's all on one line (minified)
+  opens spread over indented lines without changing any value or text, and saving puts it back on one line (Source
+  shows it as it is on disk). Format lays out JSON in a layout of its own again, and right-clicking a branch puts
+  just that object or array on one line or spreads it out. Very long lines show only their start, and lines over
+  500,000 characters (such as embedded images) are read-only.
+- **CSV and TSV** in Edit are the Read view's table, editable: add and remove rows and columns; only the cells you
+  change are rewritten in the file.
+- **Rename** a file by clicking its title above the text, with `F2`, or from its tab's or sidebar entry's right-click
+  menu; open tabs, their history and unsaved edits follow it.
+
+### The sidebar
+
+Opening a file shows its nearest `.obsidian` or `.git` folder, or else its own folder. Choose whether the sidebar
+lists Markdown files only, also files with a viewer of their own, or all files; hidden files and folders and
+`node_modules` are left out. Search finds files by name and path.
+
+A very large folder (over 50,000 files and folders, such as a home folder) is scanned as you open its subfolders, so
+links and search then cover the folders opened so far. Links to folders (symlinks, junctions) aren't followed.
+
+### Other files and large files
+
+JSON, CSV/TSV and XML open in viewers of their own; `.txt`, `.log` and files without an extension as plain text;
+other text files as code. "View as" picks another viewer, remembered per file type.
+
+Long files stay quick: tables and text only draw the rows near the view, and big JSON or XML branches add their
+items as you scroll. Text files over 20 MB (big logs) open read-only, read from disk in parts as you scroll, whatever
+their size. One with more lines than a page can hold (about a million) is shown in parts, with buttons for the
+start, earlier, later and the end.
+
+### Saving and changes from other programs
+
+- A tab keeps its unsaved edits (marked with a dot) until you save them with `Ctrl+S`, also while you look at other
+  tabs. You're asked Save / Don't save / Cancel before they'd be lost: closing the tab or window, or opening another
+  file in it. With "Save automatically" on (Settings), edits are saved whenever you switch to another file, tab or
+  mode instead. A new file asks where to save it the first time.
+- Each file keeps its encoding (UTF-8, UTF-16, Windows-1252) and line endings (CRLF or LF). A Windows-1252 file that
+  gets characters it can't hold, such as emoji, is saved as UTF-8 instead.
+- When a file you have open changes on disk (another editor, `git pull`), it shows the new version right away, and
+  the sidebar updates too. If you have unsaved edits in it, Settings decides: **Ask me** (default) keeps both when the
+  changes are on different lines, and otherwise lets you compare, keep yours, save yours as a copy or reload; **Keep
+  mine** leaves your edits (saving asks before overwriting the new version); **Take new** saves your edits as a copy
+  next to the file and shows the new version.
+- One instance runs at a time: opening more files adds tabs to the window you used last.
+
+### Tabs, panes and comparisons
+
+- **Tabs** each have their own back/forward history. Drag a tab to reorder it, out of the window to open it in a new
+  one, or onto another window to move it there.
 - **Open to the side:** right-click a file in the sidebar, a link or a tab, or drag a tab onto the right half of the
   page (when its pane has other tabs). Drag a tab onto the other pane to move it there; a pane closes with its last
   tab, and the divider between the panes can be dragged (double-click it to reset).
@@ -131,10 +163,8 @@ Differences from Windows:
   a tab's menu with the file in the other pane.
 - **Compare with git:** "Compare with last commit", or "Compare with commit…" to pick from the commits that changed the
   file (renames are followed).
-- Comparisons use the files as saved, and ignore differences in line endings alone.
-
-A very large folder (over 50,000 files and folders, such as a home folder) is scanned as you open its subfolders, so
-links and search then cover the folders opened so far. Links to folders (symlinks, junctions) aren't followed.
+- Comparisons show the two side by side, with changed lines and words highlighted and unchanged stretches folded away.
+  They use the files as saved, and ignore differences in line endings alone.
 
 ### Keyboard shortcuts
 
