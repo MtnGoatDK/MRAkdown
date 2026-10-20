@@ -49,9 +49,10 @@ const OPEN_FOLD_MAX = 1_500_000;
 // lines (wrapping a huge line takes seconds). Read mode shows such lines in full.
 const LONG_LINE = 10_000;
 const LONG_LINE_SHOWN = 1_000;
-// Files with a line this long (minified files: the whole file on one line) aren't parsed for colours and branches,
-// and are read-only here: every keystroke would re-read the whole line. Format (JSON) spreads them over lines.
-const PARSE_MAX_LINE = 2_000_000;
+// Lines longer than this are read-only here: a keystroke in one re-reads the whole line (about 10 ms per 500,000
+// characters). Other lines in the file stay editable. A minified file (all on one line) can be spread over lines
+// with Format.
+const EDIT_MAX_LINE = 500_000;
 
 const JSON_VALUES = new Set(['Object', 'Array', 'String', 'Number', 'True', 'False', 'Null']);
 const XML_CHILDREN = new Set(['Element', 'Comment', 'Cdata', 'ProcessingInst']);
@@ -69,8 +70,15 @@ const KINDS = {
       return node.name === 'Object' ? `${n.toLocaleString()} ${n === 1 ? 'key' : 'keys'}` : `${n.toLocaleString()} ${n === 1 ? 'item' : 'items'}`;
     },
     range: (node) => ({ from: node.from + 1, to: node.to - 1 }),
+    valid(text) {
+      try { JSON.parse(text); return true; } catch { return false; }
+    },
+    // reflowJson drops all spaces between values, a line break at the end too: kept as the text had it
+    layout: (text, layout) => reflowJson(text, layout) + (text.endsWith('\n') ? '\n' : ''),
   },
   xml: {
+    valid: (text) => !new DOMParser().parseFromString(text, 'application/xml').querySelector('parsererror'),
+    layout: (text, layout) => reflowXml(text, layout),
     language: () => xml(),
     isBranch: (node) => node.name === 'Element' && node.firstChild?.name === 'OpenTag',
     summary(node, state) {
@@ -175,7 +183,73 @@ function reflowJson(text, layout, base = '') {
   return out.join('');
 }
 
-/** True for JSON written on one line (minified), with at most a line break at the end. */
+/**
+ * Lays out XML again: layout 'minified' (on one line) or the text for one level of indentation (each tag on its own
+ * line, indented). Line breaks only go between two tags; text, attributes, comments, CDATA and the DOCTYPE are kept
+ * exactly as written, and an element holding only text stays on one line. 'minified' removes only the spaces and line
+ * breaks between tags that contain a line break (a file that was on one line has none of its own).
+ */
+function reflowXml(text, layout, base = '') {
+  const spread = layout !== 'minified';
+  const out = [];
+  const pad = [];
+  const newline = (depth) => (pad[depth] ??= '\n' + base + layout.repeat(Math.max(0, depth)));
+  const until = (marker, from) => {
+    const i = text.indexOf(marker, from);
+    return i === -1 ? text.length : i + marker.length;
+  };
+  let depth = 0;
+  let prev = null; // the last piece: 'open', 'close', 'other' (comment, declaration, empty element) or 'text'
+  for (let i = 0; i < text.length;) {
+    if (text[i] !== '<') {
+      const stop = text.indexOf('<', i) === -1 ? text.length : text.indexOf('<', i);
+      const run = text.slice(i, stop);
+      i = stop;
+      // Line breaks and spaces between two tags: layout, replaced by this layout's own
+      if (prev !== null && prev !== 'text' && stop < text.length && !run.trim() && run.includes('\n')) continue;
+      out.push(run);
+      prev = 'text';
+      continue;
+    }
+    let end;
+    if (text.startsWith('<!--', i)) end = until('-->', i + 4);
+    else if (text.startsWith('<![CDATA[', i)) end = until(']]>', i + 9);
+    else if (text.startsWith('<?', i)) end = until('?>', i + 2);
+    else if (text.startsWith('<!', i)) {
+      // <!DOCTYPE ...>, with an internal subset in [ ] if it has one
+      const gt = text.indexOf('>', i);
+      const bracket = text.indexOf('[', i);
+      end = bracket !== -1 && (gt === -1 || bracket < gt) ? until('>', until(']', bracket)) : until('>', i);
+    } else {
+      // A tag: up to its ">", skipping any inside quoted attribute values
+      let j = i + 1;
+      for (let quote = null; j < text.length; j++) {
+        const ch = text[j];
+        if (quote) { if (ch === quote) quote = null; } else if (ch === '"' || ch === "'") quote = ch; else if (ch === '>') break;
+      }
+      end = j + 1;
+    }
+    const piece = text.slice(i, end);
+    i = end;
+    if (piece.startsWith('<![CDATA[')) {
+      // CDATA is the element's text: no line break may go around it
+      out.push(piece);
+      prev = 'text';
+      continue;
+    }
+    const kind = piece.startsWith('</') ? 'close'
+      : piece[1] === '!' || piece[1] === '?' || piece.endsWith('/>') ? 'other' : 'open';
+    if (kind === 'close') depth--;
+    // A new line before each tag that follows another tag (an empty element, <a></a>, stays on one line)
+    if (spread && prev !== null && prev !== 'text' && !(kind === 'close' && prev === 'open')) out.push(newline(depth));
+    out.push(piece);
+    if (kind === 'open') depth++;
+    prev = kind;
+  }
+  return out.join('');
+}
+
+/** True for text written on one line (minified), with at most a line break at the end. */
 const isOneLine = (text) => {
   const i = text.indexOf('\n');
   return i === -1 || i === text.length - 1;
@@ -209,17 +283,30 @@ function indentUnit(text) {
  */
 export function createCodeSurface(parent, host) {
   const editable = new Compartment();
-  const languageSlot = new Compartment();
   const wrapSlot = new Compartment();
-  const readOnlySlot = new Compartment();
   let disabled = true;
   let kind = 'json';
   let unit = 2;
-  let mode = { wrap: true, parse: true }; // off for files with long lines (see LONG_LINE and PARSE_MAX_LINE)
+  // What the file's longest line allows: wrapping (see LONG_LINE); locked: some lines are read-only (EDIT_MAX_LINE);
+  // oneLine: the whole file is one line (minified)
+  let mode = { wrap: true, locked: false, oneLine: false };
   const modeFor = (text) => {
     const longest = longestLine(text);
-    return { wrap: longest <= LONG_LINE, parse: longest <= PARSE_MAX_LINE };
+    return { wrap: longest <= LONG_LINE, locked: longest > EDIT_MAX_LINE, oneLine: isOneLine(text) };
   };
+  // Edits in a line over EDIT_MAX_LINE are dropped (Format, and Undo/Redo of it, may change them)
+  const lockLongLines = EditorState.changeFilter.of((tr) => {
+    if (!mode.locked || tr.isUserEvent('input.format') || tr.isUserEvent('undo') || tr.isUserEvent('redo')) return true;
+    const blocked = [];
+    tr.changes.iterChangedRanges((from, to) => {
+      const doc = tr.startState.doc;
+      for (let line = doc.lineAt(from); ; line = doc.line(line.number + 1)) {
+        if (line.length > EDIT_MAX_LINE) blocked.push(line.from, line.to);
+        if (line.to >= to || line.number === doc.lines) break;
+      }
+    });
+    return blocked.length ? blocked : true;
+  });
 
   // Our own element around the editor, for the classes editor.js sets (which surface is in use). It scrolls, with
   // the file name and summary bar above the editor, as in the Read view.
@@ -236,7 +323,7 @@ export function createCodeSurface(parent, host) {
       <div class="viewer-actions">
         <button type="button" data-op="expand">Expand all</button>
         <button type="button" data-op="collapse">Collapse all</button>
-        <button type="button" data-op="format" title="Spread the JSON over indented lines, to read and edit it. Values stay exactly as written; a file that was on one line (minified) is saved on one line again.">Format</button>
+        <button type="button" data-op="format" title="Spread the file over indented lines, to read and edit it. Values and text stay exactly as written; a file that was on one line (minified) is saved on one line again.">Format</button>
       </div>
     </div>`;
   const info = header.querySelector('.viewer-info');
@@ -367,8 +454,8 @@ export function createCodeSurface(parent, host) {
     closeBrackets(),
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, indentWithTab]),
     syntaxHighlighting(codeStyle),
-    languageSlot.of(mode.parse ? KINDS[kind].language() : []),
-    readOnlySlot.of(EditorState.readOnly.of(!mode.parse)),
+    KINDS[kind].language(),
+    lockLongLines,
     kind === 'json' ? jsonLinter : [],
     folding,
     tree,
@@ -393,34 +480,33 @@ export function createCodeSurface(parent, host) {
   const view = new EditorView({ parent: root, state: EditorState.create({ doc: '', extensions: extensions() }) });
   let known = { text: '', doc: view.state.doc }; // a document known to equal a text (see differs)
 
-  /** Turns wrapping and parsing on or off, for the file's longest line (see LONG_LINE and PARSE_MAX_LINE). */
+  /** Shows what the file's longest line allows (see modeFor): the note about read-only lines. */
+  function showMode(next) {
+    root.classList.toggle('live-code-oneline', next.oneLine);
+    header.querySelector('.live-code-note').textContent = !next.locked ? ''
+      : next.oneLine ? ' · All on one line, so read-only here: Format to edit it'
+        : ` · Lines over ${EDIT_MAX_LINE.toLocaleString()} characters are read-only here`;
+  }
+
+  /** Switches to what a new longest line allows (see modeFor), after Format or other changes to the layout. */
   function setMode(next) {
-    root.classList.toggle('live-code-unparsed', !next.parse);
-    const effects = [];
-    if (next.parse !== mode.parse) {
-      effects.push(languageSlot.reconfigure(next.parse ? KINDS[kind].language() : []));
-      effects.push(readOnlySlot.reconfigure(EditorState.readOnly.of(!next.parse)));
-    }
-    if (next.wrap !== mode.wrap) effects.push(wrapSlot.reconfigure(next.wrap ? EditorView.lineWrapping : []));
+    showMode(next);
+    const wrapChanged = next.wrap !== mode.wrap;
     mode = next;
-    if (effects.length) view.dispatch({ effects });
+    if (wrapChanged) view.dispatch({ effects: wrapSlot.reconfigure(next.wrap ? EditorView.lineWrapping : []) });
   }
 
   /**
-   * Format: spreads the JSON over indented lines, as one edit (Undo reverts it). Only for valid JSON. Only the layout
-   * changes, so the formatted text still counts as the text it came from: no unsaved changes until you edit it, and
-   * a file that was on one line is saved on one line again (see textForSave).
+   * Format: spreads the file over indented lines, as one edit (Undo reverts it). Only for a valid file. Only the
+   * layout changes, so the formatted text still counts as the text it came from: no unsaved changes until you edit
+   * it, and a file that was on one line is saved on one line again (see textForSave).
    */
   function format() {
     const before = view.state.doc;
     const text = before.toString();
-    try {
-      JSON.parse(text);
-    } catch {
-      return; // the summary already says what's wrong
-    }
-    let result = reflowJson(text, '  ');
-    if (text.endsWith('\n')) result += '\n';
+    if (kind === 'xml' && !mode.oneLine) return; // see live.css: XML only when it's saved on one line again
+    if (!KINDS[kind].valid(text)) return; // the summary (JSON) or Read mode (XML) says what's wrong
+    const result = KINDS[kind].layout(text, '  ');
     if (result === text) return;
     const equivalent = before.eq(known.doc) ? known.text : text;
     unit = 2;
@@ -438,7 +524,9 @@ export function createCodeSurface(parent, host) {
     const line = state.doc.lineAt(node.from);
     const base = /^ */.exec(state.sliceDoc(line.from, Math.min(line.to, line.from + 1000)))[0];
     const result = reflowJson(text, layout, base);
-    if (result !== text) view.dispatch({ changes: { from: node.from, to: node.to, insert: result }, userEvent: 'input.format' });
+    if (result === text) return;
+    view.dispatch({ changes: { from: node.from, to: node.to, insert: result }, userEvent: 'input.format' });
+    setMode(modeFor(view.state.doc.toString())); // a branch on one line may make a line long
   }
 
   /** The JSON branch a right-click is about: the object or array clicked in, or a property's object/array value. */
@@ -457,7 +545,7 @@ export function createCodeSurface(parent, host) {
   addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
   addEventListener('wheel', closeMenu, { passive: true });
   root.addEventListener('contextmenu', (e) => {
-    if (kind !== 'json' || !mode.parse || view.state.readOnly || !e.target.closest('.cm-content')) return;
+    if (kind !== 'json' || !e.target.closest('.cm-content')) return;
     const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
     const node = pos == null ? null : branchAt(pos);
     if (!node) return;
@@ -522,9 +610,6 @@ export function createCodeSurface(parent, host) {
       if (!KINDS[k]) return;
       kind = k;
       root.classList.toggle('live-code-xml', k === 'xml');
-      header.querySelector('.live-code-note').textContent = k === 'json'
-        ? ' · Minified, so read-only here: Format to edit it'
-        : ' · One very long line, so read-only here (Read mode shows all of it)';
     },
     get value() { return view.state.doc.toString(); },
     /** Replaces the whole text with a fresh document (and a fresh undo history), in the current language. */
@@ -533,11 +618,11 @@ export function createCodeSurface(parent, host) {
       setInfo('');
       unit = indentUnit(text);
       mode = modeFor(text);
-      root.classList.toggle('live-code-unparsed', !mode.parse);
+      showMode(mode);
       view.setState(EditorState.create({ doc: text, extensions: extensions() }));
       known = { text, doc: view.state.doc };
       // The same levels open as in the Read view (when the file is quick to read; big files start expanded)
-      if (text.length <= OPEN_FOLD_MAX && mode.parse) collapseFrom(OPEN_DEPTH[kind], OPEN_BUDGET_MS);
+      if (text.length <= OPEN_FOLD_MAX && !mode.oneLine) collapseFrom(OPEN_DEPTH[kind], OPEN_BUDGET_MS);
       if (kind === 'xml') xmlInfo();
     },
     /**
@@ -552,21 +637,15 @@ export function createCodeSurface(parent, host) {
       return false;
     },
     /**
-     * The text to save. A JSON file that was on one line (minified) is saved on one line again after Format: only the
-     * layout changes, values stay exactly as written. saved: the file's text as last loaded or saved.
+     * The text to save. A file that was on one line (minified) is saved on one line again after Format: only the
+     * layout changes, values and text stay exactly as written. saved: the file's text as last loaded or saved.
      */
     textForSave(saved) {
       const { doc } = view.state;
       if (doc.eq(known.doc)) return known.text;
       const text = doc.toString();
-      if (kind !== 'json' || !saved.trim() || !isOneLine(saved) || isOneLine(text)) return text;
-      try {
-        JSON.parse(text);
-      } catch {
-        return text; // not valid JSON: saved as it is
-      }
-      let result = reflowJson(text, 'minified');
-      if (saved.endsWith('\n')) result += '\n';
+      if (!saved.trim() || !isOneLine(saved) || isOneLine(text) || !KINDS[kind].valid(text)) return text;
+      const result = KINDS[kind].layout(text, 'minified');
       known = { text: result, doc };
       return result;
     },

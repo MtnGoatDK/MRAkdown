@@ -60,11 +60,10 @@
   color: var(--faint);
   font: 12px "Inter", "Segoe UI", system-ui, sans-serif;
 }
-.live-code-note { display: none; }
-.live-code-unparsed .live-code-note { display: inline; }
-/* Format is for JSON; a file too long-lined to parse has no branches to expand or collapse */
-.live-code-xml .viewer-actions [data-op="format"],
-.live-code-unparsed .viewer-actions [data-op="expand"], .live-code-unparsed .viewer-actions [data-op="collapse"] { display: none; }
+/* A file all on one line has no branches to expand or collapse. XML gets Format only when it's on one line: then
+   saving puts it back on one line, so the line breaks Format adds (text in XML) never reach the file. */
+.live-code-oneline .viewer-actions [data-op="expand"], .live-code-oneline .viewer-actions [data-op="collapse"],
+.live-code-xml:not(.live-code-oneline) .viewer-actions [data-op="format"] { display: none; }
 .live-editor.live-code .cm-matchingBracket { background: var(--accent-soft); outline: 1px solid var(--accent); }
 .live-editor.live-code .cm-tooltip { background: var(--bg-side); border: 1px solid var(--border); color: var(--text); }
 
