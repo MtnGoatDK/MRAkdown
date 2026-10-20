@@ -1442,6 +1442,10 @@ async function setViewMode(pane, mode) {
       // A link clicked in Live mode, with the same modifier keys as in the reading view.
       openLink: (href, e) => openHref(href, e, e.button === 1),
       calloutColor: (type) => CALLOUT_COLORS[type] ?? CALLOUT_COLORS.note,
+      // The file changed on disk while it has unsaved edits (see editor.js)
+      diskChange: () => store.get('diskChange', 'ask'),
+      compare: (file, text) => compareWithUnsaved(pane, file, text),
+      openFile: (file) => openInNewTab(file.root, file.path),
     });
   }
   const editor = pane.editor;
@@ -1680,6 +1684,15 @@ async function pickCommit(root, path) {
 }
 
 /** Opens a comparison tab in the active pane. */
+/** The file as it is on disk next to your unsaved version of it, in the other pane (your editor stays open). */
+async function compareWithUnsaved(pane, file, text) {
+  const tab = createTab(file.root, null);
+  tab.diff = { left: { root: file.root, path: file.path, version: 'file' }, right: { root: file.root, path: file.path, version: 'text', text } };
+  tab.title = diffTitle(tab.diff);
+  insertTab(ensureOtherPane(pane), tab);
+  await activateTab(tab);
+}
+
 async function openDiff(left, right) {
   const tab = createTab(right.root, null);
   tab.diff = { left, right };
@@ -1689,7 +1702,8 @@ async function openDiff(left, right) {
 }
 
 /** Which version a side is, in a word or two: "now", "last commit", or the commit's short hash. */
-const versionName = (side) => (side.version === 'head' ? 'last commit' : side.version === 'commit' ? side.short : 'now');
+const versionName = (side) => (side.version === 'head' ? 'last commit' : side.version === 'commit' ? side.short
+  : side.version === 'text' ? 'yours' : 'now');
 
 function diffTitle({ left, right }) {
   if (left.root === right.root && left.path === right.path) return `${fileName(right.path)} (${versionName(left)} ↔ ${versionName(right)})`;
@@ -1699,6 +1713,7 @@ function diffTitle({ left, right }) {
 /** A side of a comparison, for people: its folder and path, and which commit for git's versions. */
 function sideLabel(side) {
   const where = [rootNames.get(side.root), side.path].filter(Boolean).join(' / ');
+  if (side.version === 'text') return `${where} (your unsaved version)`;
   if (side.version === 'head') return `${where} (last commit)`;
   if (side.version === 'commit') return `${where} (commit ${side.short})`;
   return where;
@@ -1707,6 +1722,7 @@ const diffDescription = (diff) => `${sideLabel(diff.left)}  ↔  ${sideLabel(dif
 
 /** A side's text: { text }, or { error } with a message to show instead. */
 async function loadSide(side) {
+  if (side.version === 'text') return { text: side.text }; // your unsaved version
   const api = side.version === 'file' ? '/__api/source' : '/__api/git';
   const commit = side.version === 'commit'
     ? `&commit=${encodeURIComponent(side.commit)}&path=${encodeURIComponent(side.commitPath)}`
@@ -2015,6 +2031,12 @@ function toggleSettingsPanel() {
         another file, tab or mode. Off: a tab keeps its unsaved edits until you save them${shortcutHint('save') ? ` (${shortcutHint('save')})` : ''},
         and you're asked before they'd be lost.</div>
     </div>
+    <div class="settings-title settings-section">When a file you're editing changes on disk</div>
+    <div class="segmented disk-choice" role="radiogroup" aria-label="When a file you're editing changes on disk">
+      <button role="radio" data-value="ask" title="Changes in other lines than yours are combined with your edits; otherwise you choose">Ask me</button>
+      <button role="radio" data-value="keep" title="Your edits stay; saving asks whether to save them over the file">Keep mine</button>
+      <button role="radio" data-value="take" title="Your edits are saved as a copy next to the file, and the file's new version is shown">Take new</button>
+    </div>
     <div class="settings-title settings-section">Keyboard shortcuts</div>
     <button class="settings-button change-shortcuts">Change shortcuts…</button>`;
 
@@ -2022,6 +2044,10 @@ function toggleSettingsPanel() {
   const markTheme = () => themeButtons.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.theme === currentTheme())));
   markTheme();
   for (const b of themeButtons) b.onclick = () => { applyTheme(b.dataset.theme); markTheme(); };
+  const diskButtons = [...panel.querySelectorAll('.disk-choice button')];
+  const markDisk = () => diskButtons.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === store.get('diskChange', 'ask'))));
+  markDisk();
+  for (const b of diskButtons) b.onclick = () => { store.set('diskChange', b.dataset.value); markDisk(); };
 
   const swatches = [...panel.querySelectorAll('.swatch')];
   const customInput = panel.querySelector('input[type="color"]');

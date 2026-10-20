@@ -32,8 +32,11 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 - **Saving when you choose:** a tab keeps its unsaved edits (marked with a dot) until you save them with `Ctrl+S`,
   also while you look at other tabs. You're asked Save / Don't save / Cancel before they'd be lost: closing the tab or
   window, or opening another file in it. Turn on "Save automatically" in Settings to have edits saved whenever you
-  switch to another file, tab or mode instead. A new file asks where to save it the first time. If a file was changed
-  on disk since you opened it, you're asked before your version overwrites it.
+  switch to another file, tab or mode instead. A new file asks where to save it the first time.
+- **Files changed by other programs** show their new version right away. If you have unsaved edits, Settings decides:
+  **Ask me** (default) keeps both when the changes are on different lines, and otherwise lets you compare, keep yours,
+  save yours as a copy or reload; **Keep mine** leaves your edits (saving asks before overwriting the new version);
+  **Take new** saves your edits as a copy next to the file and shows the new version.
 - **Follows changes from other programs:** when a file you have open changes on disk (another editor, `git pull`),
   it shows the new version, unless you have unsaved edits in it; the folder list updates too.
 - **Tabs** with their own back/forward history; drag tabs to reorder them, into a new window, or onto another window

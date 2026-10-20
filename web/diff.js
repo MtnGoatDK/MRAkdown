@@ -46,6 +46,17 @@ function diff(a, b) {
   return ops;
 }
 
+/** diff() for two lists of lines (see merge.js). */
+export function diffLines(a, b) {
+  const ids = new Map();
+  const id = (line) => {
+    let n = ids.get(line);
+    if (n === undefined) ids.set(line, (n = ids.size));
+    return n;
+  };
+  return diff(a.map(id), b.map(id));
+}
+
 /** Myers' greedy algorithm with a backtrace; null when there are more than MAX_EDITS differences. */
 function myers(a, b) {
   const n = a.length;

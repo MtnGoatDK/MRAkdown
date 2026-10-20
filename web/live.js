@@ -576,6 +576,8 @@ export function createLiveSurface(parent, host) {
     },
     undo: () => undo(view),
     redo: () => redo(view),
+    /** Applies text changes [{ from, to, insert }] (in order, offsets in the current text), keeping the cursor. */
+    applyChanges: (changes) => view.dispatch({ changes }),
     focus: () => view.focus(),
     get disabled() { return disabled; },
     set disabled(value) {

@@ -344,6 +344,23 @@ sealed class NoteIndex
         return "attachments/" + Uri.EscapeDataString(Path.GetFileName(target));
     }
 
+    /// <summary>
+    /// Saves text as a copy next to a file ("Name (copy).md", "Name (copy 2).md", ...), in the file's encoding, and
+    /// returns the copy's path: your version, when the file was changed on disk while you edited it.
+    /// </summary>
+    public string SaveCopy(string rel, string text)
+    {
+        var full = ExistingFile(rel);
+        var dir = Path.GetDirectoryName(full)!;
+        var stem = Path.GetFileNameWithoutExtension(full);
+        var ext = Path.GetExtension(full);
+        var target = Path.Combine(dir, $"{stem} (copy){ext}");
+        for (var n = 2; File.Exists(target); n++) target = Path.Combine(dir, $"{stem} (copy {n}){ext}");
+        File.Copy(full, target); // so the copy is written in the file's encoding (TextFiles.Write keeps it)
+        TextFiles.Write(target, text);
+        return Rel(target);
+    }
+
     /// <summary>A large text file's line index, for reading it in parts (see <see cref="BigTextFile"/>).</summary>
     public string BigTextIndex(string rel) => BigTextFile.IndexJson(ExistingFile(rel));
 

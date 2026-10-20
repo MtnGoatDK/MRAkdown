@@ -15,8 +15,10 @@ import { createToolbar } from '/__app/format.js';
  *   isPlain says whether the file isn't Markdown, and viewKind how the reading view shows it ('json', 'xml', 'csv',
  *   'text' or 'code'): Live mode is a code editor for JSON and XML, a table for CSV, and plain text otherwise.
  *   openLink opens a link clicked in Live mode; calloutColor gives a callout type's colour (see app.js).
+ *   When the file changes on disk while you have unsaved edits: diskChange() is the setting ('ask', 'keep' or
+ *   'take'), compare(file, text) shows the file next to your version, openFile(file) opens a file (the copy).
  */
-export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewKind, saveDraft, write, shortcut, hint, openLink, calloutColor }) {
+export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewKind, saveDraft, write, shortcut, hint, openLink, calloutColor, diskChange, compare, openFile }) {
   const css = document.createElement('link');
   css.rel = 'stylesheet';
   css.href = '/__app/editor.css';
@@ -47,6 +49,10 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
     },
     undo: () => document.execCommand('undo'),
     redo: () => document.execCommand('redo'),
+    /** Applies text changes [{ from, to, insert }] (in order, offsets in the current text), keeping the cursor. */
+    applyChanges(changes) {
+      for (const { from, to, insert } of [...changes].reverse()) ta.setRangeText(insert, from, to, 'preserve');
+    },
     focus: () => ta.focus(),
     get disabled() { return ta.disabled; },
     set disabled(value) { ta.disabled = value; },
@@ -217,9 +223,103 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
    * Keeps caret and scroll when the text on disk is unchanged. edits: unsaved edits kept for the file while it wasn't
    * in the editor (from snapshot), shown instead of the text on disk.
    */
+  /* ---------- The file changed on disk while you have unsaved edits ---------- */
+
+  // What happens is a setting (diskChange): 'ask' combines both versions if the changes are on different lines, and
+  // otherwise asks; 'keep' leaves your version (saving then asks whether to save it over the file); 'take' saves your
+  // version as a copy next to the file and shows the file's new version.
+  const bar = document.createElement('div');
+  bar.className = 'disk-bar';
+  bar.hidden = true;
+  pane.prepend(bar);
+  let barTimer = 0;
+  let seenOnDisk = null; // the file's text last handled, so each change is handled once
+  const fileName = () => (note?.path ?? '').split('/').pop();
+
+  function showBar(message, buttons, { autoHide = false } = {}) {
+    clearTimeout(barTimer);
+    bar.replaceChildren(Object.assign(document.createElement('span'), { textContent: message }));
+    for (const [label, action] of buttons) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.onclick = action;
+      bar.append(b);
+    }
+    bar.hidden = false;
+    if (autoHide) barTimer = setTimeout(hideBar, 8000);
+  }
+  function hideBar() {
+    clearTimeout(barTimer);
+    bar.hidden = true;
+  }
+
+  /** Shows text (the file's version on disk) instead of the editor's, as the file's saved text. */
+  function reloadWith(text) {
+    const { selectionStart, selectionEnd, scrollTop } = surface;
+    saved = text;
+    surface.value = text;
+    surface.setSelectionRange(Math.min(selectionStart, text.length), Math.min(selectionEnd, text.length));
+    surface.scrollTop = scrollTop;
+    setDirty(isDirty());
+  }
+
+  /** Saves your version as a copy next to the file, then shows the file's version (disk). */
+  async function saveMineAsCopy(disk, message) {
+    const mine = surface.textForSave ? surface.textForSave(saved) : surface.value;
+    const res = await fetch('/__api/copy' + query(note), { method: 'POST', body: crlf ? mine.replace(/\n/g, '\r\n') : mine });
+    if (!res.ok) {
+      showBar(`Couldn't save your version as a copy: ${await res.text()}`, [['OK', hideBar]]);
+      return;
+    }
+    const copy = { root: note.root, path: (await res.json()).path };
+    reloadWith(disk);
+    showBar(`${message} “${copy.path.split('/').pop()}”.`, [['Open it', () => { hideBar(); openFile?.(copy); }], ['OK', hideBar]]);
+  }
+
+  /** Called when the file may have changed on disk: handles a change if you have unsaved edits (see above). */
+  async function checkDisk() {
+    if (note === null || note.draft || !isDirty()) return;
+    const file = note;
+    const res = await fetch('/__api/source' + query(file));
+    if (!res.ok || !sameAs(file)) return;
+    const disk = (await res.text()).replace(/\r\n/g, '\n');
+    if (disk === saved || disk === seenOnDisk || !isDirty()) return;
+    seenOnDisk = disk;
+    const what = diskChange?.() ?? 'ask';
+    if (what === 'keep') return;
+    if (what === 'take') {
+      await saveMineAsCopy(disk, `“${fileName()}” was changed on disk. It shows the new version; your edits were saved as`);
+      return;
+    }
+    // Ask, unless the changes on disk and yours are on different lines: then both are kept
+    const [{ diffLines }, { merge3, textChanges }] = await Promise.all([import('/__app/diff.js'), import('/__app/merge.js')]);
+    const mine = surface.value;
+    const merged = merge3(saved, mine, disk, diffLines);
+    if (merged !== null) {
+      if (surface.applyChanges) surface.applyChanges(textChanges(mine, merged, diffLines));
+      else surface.value = merged;
+      saved = disk;
+      setDirty(isDirty());
+      showBar(`“${fileName()}” was changed on disk, in other lines than yours: both changes are kept.`, [['OK', hideBar]], { autoHide: true });
+      return;
+    }
+    showBar(`“${fileName()}” was changed on disk, in lines you've changed too.`, [
+      ['Compare', () => compare?.(file, surface.value)],
+      ['Save mine as a copy', () => saveMineAsCopy(disk, 'Your version was saved as')],
+      // Your version is then saved over the file without asking again
+      ['Keep mine', () => { saved = disk; setDirty(isDirty()); hideBar(); }],
+      ['Reload', () => { reloadWith(disk); hideBar(); }],
+    ]);
+  }
+
   async function load(n, edits = null) {
     // The file type decides between the text box and the Live editor; pick before filling it.
     await useSurface();
+    if (!sameAs(n)) {
+      hideBar();
+      seenOnDisk = null;
+    }
     if (n !== null && !n.draft && edits) {
       note = n;
       saved = edits.saved;
@@ -229,6 +329,7 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
       surface.setSelectionRange(edits.selectionStart ?? 0, edits.selectionEnd ?? 0);
       surface.scrollTop = edits.scrollTop ?? 0;
       setDirty(isDirty());
+      checkDisk(); // the file may have changed while its edits waited in their tab
       return;
     }
     if (n === null) {
@@ -398,7 +499,7 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
       if (sameAs(file)) note = { ...note, path: newPath };
     },
     /** Picks up changes made to the file outside the editor, unless there are unsaved edits. */
-    refresh: () => (isDirty() || note === null || note.draft ? Promise.resolve() : load(note)),
+    refresh: () => (note === null || note.draft ? Promise.resolve() : isDirty() ? checkDisk() : load(note)),
     focus: () => surface.focus(),
     /** The current text, e.g. to keep a new note's draft while another tab is shown. */
     text: () => surface.value,

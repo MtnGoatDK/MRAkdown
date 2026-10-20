@@ -94,3 +94,27 @@ body:has(.split-resizer.dragging) .view { pointer-events: none; }
 .live-surface > .cm-editor { flex: 1; min-height: 0; }
 .editor-pane:not(.live-on) .live-surface,
 .editor-pane .live-surface:not(.surface-active) { display: none; }
+
+/* The file changed on disk while you have unsaved edits (see editor.js): what happened, and what you can do */
+.disk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  font-size: 13px;
+}
+.disk-bar[hidden] { display: none; }
+.disk-bar span { flex: 1 1 260px; color: var(--text); }
+.disk-bar button {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.disk-bar button:hover { border-color: var(--accent); }

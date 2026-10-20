@@ -72,6 +72,8 @@ static class NoteServer
                 long.Parse(query["from"] ?? "0"), Math.Clamp(int.Parse(query["count"] ?? "200"), 1, 100_000))),
             ("/__api/render", true) => PageResponse.Json(index.RenderJson(note, BodyText())),
             ("/__api/save", true) => SaveNote(),
+            // Saves the text sent as a copy next to the file: { path } of the copy
+            ("/__api/copy", true) => PageResponse.Json(JsonSerializer.Serialize(new { path = index.SaveCopy(note, BodyText()) })),
             // Renames the file (to: its new name); the new path, or 409 with the reason it can't be renamed
             ("/__api/rename", true) => RenameNote(),
             // Where a [[wikilink]] in the note points (for Live mode), as in the reading view; url is null if nowhere.

@@ -665,6 +665,8 @@ export function createCodeSurface(parent, host) {
     replaceSelection(text) { view.dispatch({ ...view.state.replaceSelection(text), scrollIntoView: true, userEvent: 'input' }); },
     undo: () => undo(view),
     redo: () => redo(view),
+    /** Applies text changes [{ from, to, insert }] (in order, offsets in the current text), keeping the cursor. */
+    applyChanges: (changes) => view.dispatch({ changes }),
     focus: () => view.focus(),
     get disabled() { return disabled; },
     set disabled(value) {
