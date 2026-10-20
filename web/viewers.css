@@ -70,6 +70,8 @@
 .t-toggle { display: inline-block; width: 16px; color: var(--faint); transition: transform 0.1s; }
 .t-node.open > .t-head .t-toggle { transform: rotate(90deg); }
 .t-kids { padding-left: 18px; border-left: 1px solid var(--border); margin-left: 7px; }
+/* A branch's children come in chunks; one out of view isn't laid out (its last height stands in for it) */
+.t-chunk { content-visibility: auto; contain-intrinsic-size: auto 500px; }
 .t-node:not(.open) > .t-kids, .t-node:not(.open) > .t-close { display: none; }
 .t-node.open > .t-head .t-collapsed { display: none; }
 .t-summary { margin: 0 6px; padding: 0 6px; border-radius: 4px; background: var(--hover); color: var(--faint); font-size: 12px; }

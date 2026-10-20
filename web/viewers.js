@@ -45,7 +45,7 @@ const ALL_LEVELS = 1000;
 const CHUNK = 500;
 const CSV_ROWS = 1000; // CSV: rows laid out to measure the table (see csvViewer)
 const CSV_OVERSCAN = 30;
-const TEXT_LINES = 20000;
+const TEXT_BLOCK = 200; // text: lines per block (see textViewer)
 
 /**
  * Renders a file ({ title, text }) with its viewer into container.
@@ -140,6 +140,22 @@ function showError({ info }, message) {
   info.innerHTML = `<span class="viewer-error">${esc(message)}</span>`;
 }
 
+/**
+ * Calls next() once el (a "Show N more" row at the end of a branch) comes near the view: the next chunk is built as
+ * you scroll down to it. Watches from the next frame, when el is in the page and its scrolling view is known.
+ */
+function nextChunkWhenNear(el, next) {
+  requestAnimationFrame(() => {
+    if (!el.isConnected) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting) || !el.isConnected) return;
+      observer.disconnect();
+      next();
+    }, { root: el.closest('.view'), rootMargin: '1000px 0px' });
+    observer.observe(el);
+  });
+}
+
 /** A "Show N more" row that calls more() when clicked. */
 function moreButton(remaining, more) {
   const b = document.createElement('button');
@@ -167,20 +183,63 @@ function textViewer({ text, body, info, actions, host, rerender }) {
   info.textContent = `${fmt(lines.length)} lines · ${fmt(text.length)} characters`;
 
   const box = div('text-lines' + (wrap ? ' wrap' : ''));
-  let shown = 0;
-  const showMore = (count) => {
-    const end = Math.min(lines.length, shown + count);
-    let html = '';
-    for (let i = shown; i < end; i++) {
-      html += `<div class="tl"><span class="tl-no">${i + 1}</span><span class="tl-text">${esc(lines[i]) || ' '}</span></div>`;
-    }
-    box.insertAdjacentHTML('beforeend', html);
-    shown = end;
-    if (shown < lines.length) box.append(moreButton(lines.length - shown, () => showMore(lines.length)));
-  };
-  showMore(TEXT_LINES);
   box.style.setProperty('--gutter', `${String(lines.length).length + 1}ch`);
   body.append(box);
+
+  // The lines are in blocks of TEXT_BLOCK; only blocks near the view have their lines in the page, so a file of any
+  // length opens and scrolls quickly. A block out of view keeps its height: measured once it has been shown, else
+  // estimated from its lines' lengths (with wrapping, a long line takes several rows).
+  const lineHtml = (i) => `<div class="tl"><span class="tl-no">${i + 1}</span><span class="tl-text">${esc(lines[i]) || ' '}</span></div>`;
+  const blocks = [];
+  for (let from = 0; from < lines.length; from += TEXT_BLOCK) {
+    const block = div('tl-block');
+    block.dataset.from = from;
+    blocks.push(block);
+  }
+  box.append(...blocks);
+  const fill = (block) => {
+    const from = Number(block.dataset.from);
+    let html = '';
+    for (let i = from; i < Math.min(lines.length, from + TEXT_BLOCK); i++) html += lineHtml(i);
+    block.innerHTML = html;
+    block.style.height = '';
+    block.filled = true;
+  };
+  if (!blocks.length) return;
+  fill(blocks[0]);
+
+  // Estimated heights from the first block: one row's height, and how many characters fit on a row
+  const row = blocks[0].querySelector('.tl-no')?.getBoundingClientRect().height || 21;
+  const probe = document.createElement('span');
+  probe.className = 'tl-text';
+  probe.textContent = 'x'.repeat(100);
+  blocks[0].append(probe);
+  const charWidth = probe.getBoundingClientRect().width / 100 || 8;
+  probe.remove();
+  const textWidth = (blocks[0].querySelector('.tl-text')?.getBoundingClientRect().width || box.clientWidth) - 4;
+  const perRow = Math.max(20, Math.floor(textWidth / charWidth));
+  const rowsIn = (block) => {
+    const from = Number(block.dataset.from);
+    let rows = 0;
+    for (let i = from; i < Math.min(lines.length, from + TEXT_BLOCK); i++) rows += wrap ? Math.max(1, Math.ceil(lines[i].length / perRow)) : 1;
+    return rows;
+  };
+  // A row's real height, from the first block as laid out (a fraction of a pixel off adds up over many lines)
+  const perRowHeight = blocks[0].getBoundingClientRect().height / rowsIn(blocks[0]) || row;
+  for (const block of blocks.slice(1)) block.style.height = `${rowsIn(block) * perRowHeight}px`;
+
+  // Blocks get their lines as they come near the view, and give them up (keeping their height) once far from it
+  const observer = new IntersectionObserver((entries) => {
+    for (const { target: block, isIntersecting } of entries) {
+      if (isIntersecting && !block.filled) fill(block);
+      else if (!isIntersecting && block.filled) {
+        block.style.height = `${block.getBoundingClientRect().height}px`;
+        block.innerHTML = '';
+        block.filled = false;
+      }
+    }
+  }, { root: box.closest('.view'), rootMargin: '1500px 0px' });
+  for (const block of blocks) observer.observe(block);
 }
 
 /* ---------- JSON ---------- */
@@ -257,11 +316,20 @@ function branch({ head, summary, close, count, child, open }) {
   const closeRow = div('t-row t-close');
   closeRow.innerHTML = `<span class="t-toggle"></span>${close}`;
 
+  // Children are built in chunks of CHUNK: the first when the branch opens, each next one as the end of the last comes
+  // near the view (or "Show N more" is clicked). Chunks out of view aren't laid out (content-visibility, viewers.css),
+  // so a branch with many thousands of children stays quick.
   let built = 0;
   const build = (upTo) => {
     const end = Math.min(count, upTo);
-    for (; built < end; built++) kids.append(child(built));
-    if (built < count) kids.append(moreButton(count - built, () => build(count)));
+    const chunk = div('t-chunk');
+    for (; built < end; built++) chunk.append(child(built));
+    kids.append(chunk);
+    if (built < count) {
+      const more = moreButton(count - built, () => build(built + CHUNK));
+      kids.append(more);
+      nextChunkWhenNear(more, () => { more.remove(); build(built + CHUNK); });
+    }
   };
   const setOpen = (isOpen) => {
     node.classList.toggle('open', isOpen);
