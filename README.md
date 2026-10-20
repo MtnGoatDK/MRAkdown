@@ -21,9 +21,10 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
   tables show formatted, and the line the cursor is on (or the table it's in) shows its Markdown. The file stays
   exactly the text you type. For JSON and XML files, Edit changes the text while it looks like the Read view's tree
   (the same colours, collapsible branches with their size shown, guide lines per level), with JSON syntax errors marked
-  as you type. Format spreads a file that's all on one line (minified JSON or XML) over indented lines without
-  changing any value or text, and saving puts it back on one line; JSON can be formatted any time, and right-clicking
-  a branch puts just that object or array on one line or spreads it out. Very long lines show only their start, and
+  as you type. A file that's all on one line (minified JSON or XML) opens spread over indented lines, without
+  changing any value or text, and saving puts it back on one line (Source shows it as it is on disk). JSON in a layout
+  of its own can be laid out again with Format, and right-clicking a branch puts just that object or array on one line
+  or spreads it out. Very long lines show only their start, and
   lines over 500,000 characters (such as embedded images) are read-only in Edit. For CSV and TSV files Edit is the Read
   view's table, editable, where you can add and remove rows and columns, and only the cells you change are rewritten in
   the file. **Source** shows the plain text, every character as it is; **Split** shows the source and a preview side by

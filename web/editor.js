@@ -123,7 +123,9 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
     // The code editor's language follows the file (set before its text is)
     next.setLanguage?.(viewKind());
     if (next === surface) return;
-    const { value, selectionStart, selectionEnd, disabled } = surface;
+    const { selectionStart, selectionEnd, disabled } = surface;
+    // The text as it would be saved: a minified file spread over lines in Edit goes to Source on one line, as on disk
+    const value = surface.textForSave && note ? surface.textForSave(saved) : surface.value;
     const scrolled = scrollFraction(surface);
     surface = next;
     pane.classList.toggle('live-on', surface !== textSurface);
@@ -250,7 +252,8 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
     if (!res.ok) return load(null);
     const raw = await res.text();
     const text = raw.replace(/\r\n/g, '\n');
-    if (sameAs(n) && text === surface.value) {
+    // Unchanged on disk (compared as the surface would save it: Edit may show a minified file spread over lines)
+    if (sameAs(n) && !(surface.differs ? surface.differs(text) : surface.value !== text)) {
       saved = text;
       setDirty(false);
       return;

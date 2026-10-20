@@ -60,10 +60,11 @@
   color: var(--faint);
   font: 12px "Inter", "Segoe UI", system-ui, sans-serif;
 }
-/* A file all on one line has no branches to expand or collapse. XML gets Format only when it's on one line: then
-   saving puts it back on one line, so the line breaks Format adds (text in XML) never reach the file. */
+/* A file still all on one line (not valid, so not spread over lines) has no branches and can't be formatted. Format
+   is for JSON already spread over lines in a layout of its own; in XML, line breaks between tags can be text, so XML
+   is only ever spread over lines when it's on one line (and saved on one line again). */
 .live-code-oneline .viewer-actions [data-op="expand"], .live-code-oneline .viewer-actions [data-op="collapse"],
-.live-code-xml:not(.live-code-oneline) .viewer-actions [data-op="format"] { display: none; }
+.live-code-oneline .viewer-actions [data-op="format"], .live-code-xml .viewer-actions [data-op="format"] { display: none; }
 .live-editor.live-code .cm-matchingBracket { background: var(--accent-soft); outline: 1px solid var(--accent); }
 .live-editor.live-code .cm-tooltip { background: var(--bg-side); border: 1px solid var(--border); color: var(--text); }
 

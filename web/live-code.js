@@ -323,7 +323,7 @@ export function createCodeSurface(parent, host) {
       <div class="viewer-actions">
         <button type="button" data-op="expand">Expand all</button>
         <button type="button" data-op="collapse">Collapse all</button>
-        <button type="button" data-op="format" title="Spread the file over indented lines, to read and edit it. Values and text stay exactly as written; a file that was on one line (minified) is saved on one line again.">Format</button>
+        <button type="button" data-op="format" title="Lay the JSON out again, indented, one value per line (values stay exactly as written)">Format</button>
       </div>
     </div>`;
   const info = header.querySelector('.viewer-info');
@@ -485,7 +485,7 @@ export function createCodeSurface(parent, host) {
   function showMode(next) {
     root.classList.toggle('live-code-oneline', next.oneLine);
     header.querySelector('.live-code-note').textContent = !next.locked ? ''
-      : next.oneLine ? ' · All on one line, so read-only here: Format to edit it'
+      : next.oneLine ? ' · All on one line (and not valid, so not spread over lines), so read-only here'
         : ` · Lines over ${EDIT_MAX_LINE.toLocaleString()} characters are read-only here`;
   }
 
@@ -613,17 +613,23 @@ export function createCodeSurface(parent, host) {
       root.classList.toggle('live-code-xml', k === 'xml');
     },
     get value() { return view.state.doc.toString(); },
-    /** Replaces the whole text with a fresh document (and a fresh undo history), in the current language. */
+    /**
+     * Replaces the whole text with a fresh document (and a fresh undo history), in the current language. A file all
+     * on one line (minified) is shown spread over indented lines, as Format does: only the layout, so it still counts
+     * as the text given (nothing unsaved), and it's saved on one line again (see textForSave).
+     */
     set value(text) {
       header.querySelector('.inline-title').textContent = host.title();
       setInfo('');
-      unit = indentUnit(text);
-      mode = modeFor(text);
+      let shown = text;
+      if (text.trim() && isOneLine(text) && KINDS[kind].valid(text)) shown = KINDS[kind].layout(text, '  ');
+      unit = shown === text ? indentUnit(text) : 2;
+      mode = modeFor(shown);
       showMode(mode);
-      view.setState(EditorState.create({ doc: text, extensions: extensions() }));
+      view.setState(EditorState.create({ doc: shown, extensions: extensions() }));
       known = { text, doc: view.state.doc };
       // The same levels open as in the Read view (when the file is quick to read; big files start expanded)
-      if (text.length <= OPEN_FOLD_MAX && !mode.oneLine) collapseFrom(OPEN_DEPTH[kind], OPEN_BUDGET_MS);
+      if (shown.length <= OPEN_FOLD_MAX && !mode.oneLine) collapseFrom(OPEN_DEPTH[kind], OPEN_BUDGET_MS);
       if (kind === 'xml') xmlInfo();
     },
     /**
