@@ -1938,16 +1938,12 @@ function applyTheme(theme) {
   applyAppearance();
 }
 
-// Windows 11: the window can show the translucent Mica backdrop behind the sidebar and tab bar (a setting)
-const canMica = Boolean(window.hostBackdrops?.includes('mica'));
 const systemDark = matchMedia('(prefers-color-scheme: dark)');
 const isDark = () => currentTheme() === 'dark' || (currentTheme() === 'system' && systemDark.matches);
 
-/** Tells the Windows host the theme (for the window frame and Mica's tint) and whether to show Mica. */
+/** Tells the Windows host the theme, for the window's frame and background. */
 function applyAppearance() {
-  const mica = canMica && store.get('mica', false);
-  document.body.classList.toggle('mica', mica);
-  if (window.hostWindowControls?.nativeDrag) post({ type: 'appearance', dark: isDark(), mica });
+  if (window.hostWindowControls?.nativeDrag) post({ type: 'appearance', dark: isDark() });
 }
 systemDark.addEventListener('change', applyAppearance);
 applyAppearance();
@@ -1972,9 +1968,7 @@ function toggleSettingsPanel() {
     <div class="settings-title">Theme</div>
     <div class="segmented theme-choice" role="radiogroup" aria-label="Theme">
       ${Object.entries(THEMES).map(([value, label]) => `<button role="radio" data-theme="${value}">${label}</button>`).join('')}
-    </div>
-    ${canMica ? '<label class="settings-check settings-mica"><input type="checkbox" class="mica"> Translucent background</label>' : ''}
-    <div class="settings-title settings-section">Accent colour</div>
+    </div>    <div class="settings-title settings-section">Accent colour</div>
     <div class="swatches">
       ${ACCENTS.map((a, i) => `<button class="swatch" data-i="${i}" title="${a.name}" aria-label="${a.name}"
         style="--c-light:${a.light};--c-dark:${a.dark}"></button>`).join('')}
@@ -1996,11 +1990,6 @@ function toggleSettingsPanel() {
   const markTheme = () => themeButtons.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.theme === currentTheme())));
   markTheme();
   for (const b of themeButtons) b.onclick = () => { applyTheme(b.dataset.theme); markTheme(); };
-  const micaBox = panel.querySelector('input.mica');
-  if (micaBox) {
-    micaBox.checked = store.get('mica', false);
-    micaBox.onchange = () => { store.set('mica', micaBox.checked); applyAppearance(); };
-  }
 
   const swatches = [...panel.querySelectorAll('.swatch')];
   const customInput = panel.querySelector('input[type="color"]');

@@ -581,14 +581,6 @@ body:not(.hide-format) .format-toggle { background: var(--accent-soft); color: v
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-/* Windows 11 Mica (Settings: Translucent background): the window's backdrop shows through the sidebar and tab bar,
-   lightly tinted so text stays readable; the reading and editing area stays opaque. */
-body.mica { background: transparent; }
-body.mica #sidebar, body.mica .tabbar { background: light-dark(rgba(255, 255, 255, 0.35), rgba(0, 0, 0, 0.18)); }
-body.mica .pane-body { background: var(--bg); }
-body.mica #filter { background: light-dark(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.05)); }
-.settings-mica { margin-top: 10px; }
-
 /* Renaming a file: its title above the text (click it), its tab or its sidebar entry, edited in place */
 .pane .inline-title { cursor: text; }
 .renaming {

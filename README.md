@@ -46,8 +46,8 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 - **Keeps each file's encoding** (UTF-8, UTF-16, Windows-1252) and line endings (CRLF or LF) when saving. A
   Windows-1252 file that gets characters it can't hold, such as emoji, is saved as UTF-8 instead.
 - **One running instance:** opening more files adds tabs to the window you used last
-- **Settings** (the gear button): theme (system, light or dark), accent colour, automatic saving, keyboard
-  shortcuts, and on Windows 11 a translucent (Mica) background behind the folder panel and tab bar
+- **Settings** (the gear button): theme (system, light or dark), accent colour, automatic saving, and keyboard
+  shortcuts
 
 MRAkdown has no account and no telemetry of its own; your files are only read and written on your own computer. Web
 links open in your browser, and images that a note embeds from the web load as they would in a browser. (On Windows,

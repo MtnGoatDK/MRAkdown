@@ -38,7 +38,7 @@ sealed partial class MainForm : Form
         Size = new Size(1200, 800);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-        // Until the page says otherwise (see MainForm.Backdrop.cs): the system theme, no backdrop
+        // Until the page says otherwise (see MainForm.Appearance.cs): the system theme
         _web.DefaultBackgroundColor = _dark ? Color.FromArgb(30, 30, 30) : Color.White;
         // Shows in the thin resize strip above the page, so it matches the tab bar (--bg-side in app.css).
         BackColor = _dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(246, 246, 246);
@@ -207,7 +207,7 @@ sealed partial class MainForm : Form
                 break;
             // The page's window buttons (see MainForm.TitleBar.cs)
             case "appearance":
-                SetAppearance(m.GetProperty("dark").GetBoolean(), m.GetProperty("mica").GetBoolean());
+                SetAppearance(m.GetProperty("dark").GetBoolean());
                 break;
             case "minimize":
                 WindowState = FormWindowState.Minimized;

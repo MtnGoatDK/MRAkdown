@@ -13,11 +13,9 @@ sealed partial class MainForm
     const int WM_NCCALCSIZE = 0x0083;
     const int HTTOP = 12, HTTOPLEFT = 13;
 
-    // Read by app.js before it runs: which window buttons to draw, that dragging is native (app-region), and which
-    // backdrops the window can have (see MainForm.Backdrop.cs).
-    static string WindowControlsScript =>
-        "window.hostWindowControls = { left: [], right: ['minimize', 'maximize', 'close'], nativeDrag: true };"
-        + $"window.hostBackdrops = {(MicaSupported ? "['mica']" : "[]")};";
+    // Read by app.js before it runs: which window buttons to draw, and that dragging is native (app-region).
+    const string WindowControlsScript =
+        "window.hostWindowControls = { left: [], right: ['minimize', 'maximize', 'close'], nativeDrag: true };";
 
     // Width of the page's three window buttons (46 CSS px each, see .native-titlebar in app.css).
     const int WindowButtonsWidth = 3 * 46;
