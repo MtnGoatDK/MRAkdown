@@ -8,6 +8,7 @@ export { defaultKeymap, history, historyKeymap, indentWithTab, undo, redo } from
 export {
   syntaxTree, syntaxHighlighting, HighlightStyle, ensureSyntaxTree,
   bracketMatching, foldGutter, foldKeymap, indentOnInput,
+  codeFolding, foldable, foldEffect, unfoldEffect, foldedRanges, unfoldAll,
 } from '@codemirror/language';
 export { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 export { linter, lintGutter } from '@codemirror/lint';

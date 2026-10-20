@@ -98,12 +98,13 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
       const { createLiveSurface } = await import('/__app/live.js');
       return createLiveSurface(pane, { onInput, calloutColor, fileUrl, resolveWikilink, openLink: openLiveLink });
     }
+    const title = () => (note?.path ?? '').split('/').pop();
     if (name === 'code') {
       const { createCodeSurface } = await import('/__app/live-code.js');
-      return createCodeSurface(pane, { onInput });
+      return createCodeSurface(pane, { onInput, title });
     }
     const { createCsvSurface } = await import('/__app/live-csv.js');
-    return createCsvSurface(pane, { onInput, title: () => (note?.path ?? '').split('/').pop() });
+    return createCsvSurface(pane, { onInput, title });
   }
 
   /**

@@ -6,6 +6,13 @@ const css = document.createElement('link');
 css.rel = 'stylesheet';
 css.href = '/__app/live.css';
 document.head.append(css);
+// The CSV viewer's styles (summary bar, buttons); usually loaded already, with viewers.js
+if (!document.querySelector('link[href="/__app/viewers.css"]')) {
+  const viewerCss = document.createElement('link');
+  viewerCss.rel = 'stylesheet';
+  viewerCss.href = '/__app/viewers.css';
+  document.head.append(viewerCss);
+}
 
 const SEPARATOR_NAMES = { ',': 'commas', ';': 'semicolons', '\t': 'tabs', '|': 'pipes' };
 const PAGE_ROWS = 1000;
@@ -63,6 +70,16 @@ function parse(text, sep) {
 
 const newCell = () => ({ value: '', raw: '', quoted: false, changed: true });
 
+/** A number, as the CSV viewer reads them (right-aligned): "1234.5", "1,234.5" or Danish-style "1.234,5". */
+function isNumber(s) {
+  const t = s.trim();
+  if (!/^[-+]?[\d.,\s]+$/.test(t) || !/\d/.test(t)) return false;
+  const lastComma = t.lastIndexOf(',');
+  const lastDot = t.lastIndexOf('.');
+  const normalized = lastComma > lastDot ? t.replace(/[.\s]/g, '').replace(',', '.') : t.replace(/[,\s]/g, '');
+  return !Number.isNaN(Number(normalized));
+}
+
 /**
  * Creates the table editor inside parent, with the same "surface" as the other editors (see editor.js).
  * @param {{ onInput: () => void, title: () => string }} host title gives the file name (TSV files use tabs)
@@ -71,9 +88,10 @@ export function createCsvSurface(parent, host) {
   const root = document.createElement('div');
   root.className = 'live-csv';
   root.innerHTML = `
-    <div class="live-csv-bar">
-      <span class="live-csv-info"></span>
-      <span class="live-csv-actions">
+    <div class="inline-title"></div>
+    <div class="viewer-bar live-csv-bar">
+      <span class="viewer-info live-csv-info"></span>
+      <span class="viewer-actions live-csv-actions">
         <button type="button" data-op="addRow" title="Add a row below the current one">+ Row</button>
         <button type="button" data-op="deleteRow" title="Delete the current row">− Row</button>
         <button type="button" data-op="addColumn" title="Add a column right of the current one">+ Column</button>
@@ -119,6 +137,7 @@ export function createCsvSurface(parent, host) {
 
   function load(text) {
     const title = host.title();
+    root.querySelector('.inline-title').textContent = title;
     sep = /\.tsv$/i.test(title) ? '\t' : detectSeparator(text);
     rows = parse(text, sep);
     endsWithNewline = text.endsWith('\n');
@@ -135,12 +154,20 @@ export function createCsvSurface(parent, host) {
     try { return JSON.parse(localStorage.getItem('viewer:csv:header')) ?? true; } catch { return true; }
   }
 
-  function rowHtml(row, r, cols) {
-    let html = `<tr${r === 0 && headerRow() ? ' class="live-csv-head"' : ''}><th class="live-csv-no">${r + 1}</th>`;
+  const escape = (s) => s.replace(/[&<>]/g, (ch) => `&#${ch.charCodeAt(0)};`);
+  // A cell shows on one line, as in the CSV viewer (line breaks as spaces); the cell you're in shows its real text.
+  // (Editable cells always show line breaks, so a cell with them gets its text swapped on entering and leaving.)
+  const oneLine = (s) => s.replace(/\n/g, ' ');
+
+  // Numbered as in the CSV viewer: "#" on the header row, data rows from 1
+  function rowHtml(row, r, cols, header) {
+    const head = header && r === 0;
+    let html = `<tr${head ? ' class="live-csv-head"' : ''}><th class="live-csv-no">${head ? '#' : header ? r : r + 1}</th>`;
     for (let c = 0; c < cols; c++) {
       const value = row.cells[c]?.value ?? '';
-      const text = value.replace(/[&<>]/g, (ch) => `&#${ch.charCodeAt(0)};`);
-      html += `<td data-r="${r}" data-c="${c}"${disabled ? '' : ' contenteditable="plaintext-only"'} spellcheck="false">${text}</td>`;
+      const text = escape(oneLine(value));
+      const num = !head && isNumber(value) ? ' class="csv-num"' : '';
+      html += `<td data-r="${r}" data-c="${c}"${num}${disabled ? '' : ' contenteditable="plaintext-only"'} spellcheck="false">${text}</td>`;
     }
     return `${html}</tr>`;
   }
@@ -149,8 +176,10 @@ export function createCsvSurface(parent, host) {
     const cols = columns();
     const upTo = Math.max(PAGE_ROWS, Math.min(rows.length, shown || PAGE_ROWS), current.r + 1);
     shown = Math.min(rows.length, upTo);
+    const header = headerRow();
+    table.classList.toggle('has-head', header);
     let html = '';
-    for (let r = 0; r < shown; r++) html += rowHtml(rows[r], r, cols);
+    for (let r = 0; r < shown; r++) html += rowHtml(rows[r], r, cols, header);
     tbody.innerHTML = html;
     wrap.querySelector('.viewer-more')?.remove();
     if (shown < rows.length) {
@@ -273,6 +302,17 @@ export function createCsvSurface(parent, host) {
     const c = Number(td.dataset.c);
     if (r !== current.r || c !== current.c) typing = false;
     current = { r, c };
+    const value = rows[r]?.cells[c]?.value ?? '';
+    if (value.includes('\n')) {
+      td.textContent = value;
+      getSelection().selectAllChildren(td);
+      getSelection().collapseToEnd();
+    }
+  });
+  tbody.addEventListener('focusout', (e) => {
+    const td = e.target.closest('td[data-c]');
+    const value = td && rows[Number(td.dataset.r)]?.cells[Number(td.dataset.c)]?.value;
+    if (value?.includes('\n')) td.textContent = oneLine(value);
   });
 
   tbody.addEventListener('input', (e) => {
@@ -285,7 +325,9 @@ export function createCsvSurface(parent, host) {
       undoStack.push(before);
       redoStack.length = 0;
     }
-    setCell(Number(td.dataset.r), Number(td.dataset.c), td.innerText.replace(/\n$/, ''));
+    const value = td.innerText.replace(/\n$/, '');
+    setCell(Number(td.dataset.r), Number(td.dataset.c), value);
+    if (!td.closest('.live-csv-head')) td.classList.toggle('csv-num', isNumber(value));
     changed();
   });
 
