@@ -35,6 +35,8 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--hover); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--faint); }
+/* Where a vertical and a horizontal scrollbar meet (otherwise a white square) */
+::-webkit-scrollbar-corner { background: transparent; }
 
 /* Sidebar */
 #sidebar {
