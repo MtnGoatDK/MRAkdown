@@ -124,3 +124,8 @@
 .csv-table thead .csv-no { padding: 6px 12px; }
 .csv-table .csv-num { text-align: right; font-variant-numeric: tabular-nums; }
 .csv-wrap .viewer-more { margin: 8px; }
+
+/* A file too large for one page, in parts: Start, Earlier, Later, End */
+.big-parts { display: flex; gap: 4px; margin-right: 8px; }
+.viewer-actions button:disabled { opacity: 0.4; cursor: default; }
+.viewer-actions button:disabled:hover { background: none; color: var(--muted); }

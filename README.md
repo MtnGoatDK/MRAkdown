@@ -42,7 +42,9 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
 - **Compare files** side by side, with changed lines and words highlighted and unchanged stretches folded: two files,
   or a file with its last git commit or any earlier commit
 - **Other files open too:** JSON, CSV/TSV and XML in viewers of their own; `.txt`, `.log` and files without an extension
-  as plain text; other text files as code ("View as" picks another viewer, remembered per file type)
+  as plain text; other text files as code ("View as" picks another viewer, remembered per file type). Text files over
+  20 MB (big logs) open read-only, read from disk in parts as you scroll, whatever their size; one with more lines than
+  a page can hold (about a million) is shown in parts, with buttons for the start, earlier, later and the end
 - **Keeps each file's encoding** (UTF-8, UTF-16, Windows-1252) and line endings (CRLF or LF) when saving. A
   Windows-1252 file that gets characters it can't hold, such as emoji, is saved as UTF-8 instead.
 - **One running instance:** opening more files adds tabs to the window you used last

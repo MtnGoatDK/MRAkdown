@@ -595,3 +595,7 @@ body:not(.hide-format) .format-toggle { background: var(--accent-soft); color: v
   cursor: text;
   user-select: text;
 }
+
+/* A text file too large to edit (over 20 MB, read in parts): Read only, so no Edit, Source or Split */
+.pane.big-file .toolbar .mode-switch button:not([data-mode="read"]),
+.pane.big-file .toolbar .format-toggle, .pane.big-file .format-sep { display: none; }

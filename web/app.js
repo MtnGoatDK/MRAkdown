@@ -1309,6 +1309,9 @@ async function openNote(pane, path, { hash = '', history = 'push', keepScroll = 
   else if (hash) scrollToHeading(pane, decodeURIComponent(hash.slice(1)));
   else view.scrollTop = 0;
 
+  // A file too large to edit is shown in Read whatever the mode was (the earlier file's edits are settled by now)
+  if (note.big && pane.mode !== 'read') showMode(pane, 'read');
+
   if (pane.editor && pane.mode !== 'read') {
     // The editor takes over any unsaved edits the tab kept; edits it already has for this file stay as they are.
     const file = { root: tab.root, path: note.path };
@@ -1320,7 +1323,9 @@ async function openNote(pane, path, { hash = '', history = 'push', keepScroll = 
   }
 
   // Rendered before the folder scan finished: re-render once it has, so links to other folders resolve.
-  if (!note.indexed) {
+  // (Only notes that say so: files shown without links — too large, binary — don't, and would otherwise be re-opened
+  // over and over)
+  if (note.indexed === false) {
     (treeRequests.get(tab.root) ?? loadTree(tab.root)).then(() => {
       if (pane.activeTab === tab && pane.current === note.path && !isRenaming(pane.el)) {
         openNote(pane, note.path, { history: 'none', keepScroll: true });
@@ -1349,7 +1354,11 @@ function showNote(pane, note) {
   pane.el.classList.toggle('plain-file', note.markdown === false);
   content.classList.remove('viewer-wide', 'diff-wide');
   delete content.dataset.viewKind; // set again by the viewer for files it shows (see renderViewer)
-  if (note.markdown === false && !note.binary && !note.tooLarge) {
+  // A text file too large to load whole: read in parts, Read only (see renderBigText in viewers.js)
+  pane.el.classList.toggle('big-file', Boolean(note.big));
+  if (note.big) {
+    showBigText(pane, content, note);
+  } else if (note.markdown === false && !note.binary && !note.tooLarge) {
     showInViewer(content, note);
   } else if (note.markdown === false) {
     content.innerHTML = textFileHtml(note);
@@ -1383,6 +1392,21 @@ function showInViewer(content, note) {
   });
 }
 
+async function showBigText(pane, content, note) {
+  const root = pane.activeTab?.root;
+  const query = apiQuery(root, note.path);
+  const host = {
+    store,
+    bigText: {
+      index: async () => (await fetch('/__api/text-index' + query)).json(),
+      lines: async (from, count) => (await fetch(`/__api/text-lines${query}&from=${from}&count=${count}`)).text(),
+    },
+  };
+  content.innerHTML = `<div class="inline-title">${esc(note.title)}</div>`;
+  viewers ??= await import('/__app/viewers.js');
+  if (pane.current === note.path) viewers.renderBigText(content, note, host);
+}
+
 function textFileHtml(note) {
   if (note.binary) return `<div class="empty">“${esc(note.title)}” isn't a text file, so it can't be shown.</div>`;
   if (note.tooLarge) return `<div class="empty">“${esc(note.title)}” is too large to open (over 20 MB).</div>`;
@@ -1392,8 +1416,16 @@ function textFileHtml(note) {
   return `<div class="inline-title">${esc(note.title)}</div><pre class="text-file"><code class="${lang}">${esc(note.text)}</code></pre>`;
 }
 
+/** Marks a pane's mode (its data-mode and the active mode button) without anything else setViewMode does. */
+function showMode(pane, mode) {
+  pane.mode = mode;
+  pane.el.dataset.mode = mode;
+  for (const btn of pane.el.querySelectorAll('.toolbar button[data-mode]')) btn.classList.toggle('active', btn.dataset.mode === mode);
+}
+
 async function setViewMode(pane, mode) {
   if (mode === pane.mode || pane.activeTab?.diff) return;
+  if (mode !== 'read' && pane.el.classList.contains('big-file')) return; // too large to edit: Read only
   if (mode !== 'read' && !pane.editor) {
     const { createEditor } = await import('/__app/editor.js');
     pane.editor = createEditor({

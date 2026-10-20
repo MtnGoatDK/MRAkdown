@@ -172,44 +172,75 @@ function moreButton(remaining, more) {
 /* ---------- Text ---------- */
 
 function textViewer({ text, body, info, actions, host, rerender }) {
+  const wrap = wrapButton(actions, host, rerender);
+  const lines = text.split(/\r?\n/);
+  if (lines.length > 1 && lines.at(-1) === '') lines.pop();
+  info.textContent = `${fmt(lines.length)} lines · ${fmt(text.length)} characters`;
+  showLineBlocks(body, {
+    count: lines.length,
+    blockSize: TEXT_BLOCK,
+    wrap,
+    lines: (from, n) => lines.slice(from, from + n),
+    // Rows a block takes: with wrapping, a long line takes several
+    rows: (from, n, perRow) => {
+      if (!wrap) return n;
+      let rows = 0;
+      for (let i = from; i < Math.min(lines.length, from + n); i++) rows += Math.max(1, Math.ceil(lines[i].length / perRow));
+      return rows;
+    },
+  });
+}
+
+function wrapButton(actions, host, rerender) {
   const wrap = host.store.get('viewer:text:wrap', true);
   button(actions, 'Wrap lines', wrap, () => {
     host.store.set('viewer:text:wrap', !wrap);
     rerender();
   });
+  return wrap;
+}
 
-  const lines = text.split(/\r?\n/);
-  if (lines.length > 1 && lines.at(-1) === '') lines.pop();
-  info.textContent = `${fmt(lines.length)} lines · ${fmt(text.length)} characters`;
-
+/**
+ * Shows numbered lines in blocks of blockSize: only blocks near the view have their lines in the page, so a file of
+ * any length opens and scrolls quickly. A block out of view keeps its height: measured once it has been shown, else
+ * estimated by rows(from, n, charactersPerRow), calibrated on the first block. lines(from, n) gives a block's lines,
+ * directly or as a promise (a large file's lines come from the host as they're needed).
+ */
+async function showLineBlocks(body, { count, blockSize, wrap, lines, rows, firstNo = 1, digits = String(count).length }) {
   const box = div('text-lines' + (wrap ? ' wrap' : ''));
-  box.style.setProperty('--gutter', `${String(lines.length).length + 1}ch`);
+  box.style.setProperty('--gutter', `${digits + 1}ch`);
   body.append(box);
-
-  // The lines are in blocks of TEXT_BLOCK; only blocks near the view have their lines in the page, so a file of any
-  // length opens and scrolls quickly. A block out of view keeps its height: measured once it has been shown, else
-  // estimated from its lines' lengths (with wrapping, a long line takes several rows).
-  const lineHtml = (i) => `<div class="tl"><span class="tl-no">${i + 1}</span><span class="tl-text">${esc(lines[i]) || ' '}</span></div>`;
   const blocks = [];
-  for (let from = 0; from < lines.length; from += TEXT_BLOCK) {
+  for (let from = 0; from < count; from += blockSize) {
     const block = div('tl-block');
     block.dataset.from = from;
     blocks.push(block);
   }
   box.append(...blocks);
-  const fill = (block) => {
+  if (!blocks.length) return;
+
+  const sizeOf = (block) => Math.min(blockSize, count - Number(block.dataset.from));
+  // Fills a block with its lines, unless it's no longer wanted by the time they're there
+  const fill = async (block) => {
+    block.wanted = true;
+    if (block.filled || block.loading) return;
+    block.loading = true;
     const from = Number(block.dataset.from);
+    const text = await lines(from, sizeOf(block));
+    block.loading = false;
+    if (!block.wanted) return;
     let html = '';
-    for (let i = from; i < Math.min(lines.length, from + TEXT_BLOCK); i++) html += lineHtml(i);
+    text.forEach((line, i) => {
+      html += `<div class="tl"><span class="tl-no">${firstNo + from + i}</span><span class="tl-text">${esc(line) || ' '}</span></div>`;
+    });
     block.innerHTML = html;
     block.style.height = '';
     block.filled = true;
   };
-  if (!blocks.length) return;
-  fill(blocks[0]);
+  await fill(blocks[0]);
 
-  // Estimated heights from the first block: one row's height, and how many characters fit on a row
-  const row = blocks[0].querySelector('.tl-no')?.getBoundingClientRect().height || 21;
+  // Estimated heights from the first block: how many characters fit on a row, and a row's real height (a fraction
+  // of a pixel off adds up over many lines)
   const probe = document.createElement('span');
   probe.className = 'tl-text';
   probe.textContent = 'x'.repeat(100);
@@ -218,21 +249,18 @@ function textViewer({ text, body, info, actions, host, rerender }) {
   probe.remove();
   const textWidth = (blocks[0].querySelector('.tl-text')?.getBoundingClientRect().width || box.clientWidth) - 4;
   const perRow = Math.max(20, Math.floor(textWidth / charWidth));
-  const rowsIn = (block) => {
-    const from = Number(block.dataset.from);
-    let rows = 0;
-    for (let i = from; i < Math.min(lines.length, from + TEXT_BLOCK); i++) rows += wrap ? Math.max(1, Math.ceil(lines[i].length / perRow)) : 1;
-    return rows;
-  };
-  // A row's real height, from the first block as laid out (a fraction of a pixel off adds up over many lines)
-  const perRowHeight = blocks[0].getBoundingClientRect().height / rowsIn(blocks[0]) || row;
-  for (const block of blocks.slice(1)) block.style.height = `${rowsIn(block) * perRowHeight}px`;
+  const firstRows = rows(0, sizeOf(blocks[0]), perRow);
+  const rowHeight = blocks[0].getBoundingClientRect().height / firstRows
+    || blocks[0].querySelector('.tl-no')?.getBoundingClientRect().height || 21;
+  for (const block of blocks.slice(1)) block.style.height = `${rows(Number(block.dataset.from), sizeOf(block), perRow) * rowHeight}px`;
 
   // Blocks get their lines as they come near the view, and give them up (keeping their height) once far from it
   const observer = new IntersectionObserver((entries) => {
     for (const { target: block, isIntersecting } of entries) {
-      if (isIntersecting && !block.filled) fill(block);
-      else if (!isIntersecting && block.filled) {
+      if (isIntersecting) fill(block);
+      else {
+        block.wanted = false;
+        if (!block.filled) continue;
         block.style.height = `${block.getBoundingClientRect().height}px`;
         block.innerHTML = '';
         block.filled = false;
@@ -240,6 +268,93 @@ function textViewer({ text, body, info, actions, host, rerender }) {
     }
   }, { root: box.closest('.view'), rootMargin: '1500px 0px' });
   for (const block of blocks) observer.observe(block);
+  return box;
+}
+
+// A browser page can only be so tall (about 33 million pixels): a file whose lines would be taller is shown in parts
+// of about BIG_PART_PX each. The part each such file shows, while the app runs (kept when the file is re-shown).
+const BIG_PART_PX = 20_000_000;
+const bigParts = new Map();
+
+/**
+ * A text file too large to load whole (a big log): read-only, its lines read from the host in parts as they come into
+ * view (see BigTextFile in the host). host.bigText: { index(): its line index, lines(from, count): their text }.
+ */
+export async function renderBigText(container, note, host) {
+  container.dataset.viewKind = 'text';
+  container.classList.add('viewer-wide');
+  const rerender = () => renderBigText(container, note, host);
+  container.innerHTML = `<div class="inline-title">${esc(note.title)}</div>`;
+  const bar = div('viewer-bar');
+  const info = document.createElement('span');
+  info.className = 'viewer-info';
+  const actions = div('viewer-actions');
+  bar.append(info, actions);
+  const body = div('viewer-body');
+  container.append(bar, body);
+  const mb = (bytes) => `${(bytes / 1048576).toLocaleString(undefined, { maximumFractionDigits: 0 })} MB`;
+  info.textContent = `${mb(note.size)} · reading the file…`;
+
+  const index = await host.bigText.index();
+  if (!container.isConnected) return;
+  const wrap = wrapButton(actions, host, rerender);
+  const startOf = (line) => index.starts[Math.floor(line / index.step)] ?? index.size;
+
+  // Lines per part: as many as fit in BIG_PART_PX (rows of about 21px; with wrapping, a long line takes several)
+  const perRow = Math.max(40, Math.floor((body.clientWidth || 900) / 7.8) - 12);
+  const rowsPerLine = wrap ? Math.max(1, index.size / Math.max(1, index.lines) / perRow) : 1;
+  const partLines = Math.max(index.step, Math.floor(BIG_PART_PX / 21 / rowsPerLine / index.step) * index.step);
+  const parts = Math.max(1, Math.ceil(index.lines / partLines));
+  let part = Math.min(bigParts.get(note.path) ?? 0, parts - 1);
+  const lineCount = (p) => Math.min(partLines, index.lines - p * partLines);
+  // Blocks of a whole number of the index's steps, and no more than about 20,000 of them in the page
+  const blockSize = index.step * Math.max(1, Math.ceil(lineCount(0) / index.step / 20000));
+
+  const nav = div('big-parts');
+  if (parts > 1) actions.prepend(nav);
+  // scrollTo: 'start' or 'end' of the part (the part buttons); left as it is when the file is shown (again)
+  const showPart = async (p, scrollTo = null) => {
+    part = p;
+    bigParts.set(note.path, p);
+    const first = p * partLines;
+    const count = lineCount(p);
+    info.textContent = parts > 1
+      ? `Lines ${fmt(first + 1)}–${fmt(first + count)} of ${fmt(index.lines)} · ${mb(index.size)} · Read only (too large to edit)`
+      : `${fmt(index.lines)} lines · ${mb(index.size)} · Read only (too large to edit)`;
+    nav.innerHTML = '';
+    for (const [label, title, to, enabled] of [
+      ['⇤', 'Start of the file', 0, p > 0],
+      ['‹ Earlier', `Lines before ${fmt(first + 1)}`, p - 1, p > 0],
+      ['Later ›', `Lines after ${fmt(first + count)}`, p + 1, p < parts - 1],
+      ['⇥', 'End of the file', parts - 1, p < parts - 1],
+    ]) {
+      const b = button(nav, label, null, () => showPart(to, to === p - 1 || to === parts - 1 ? 'end' : 'start'));
+      b.title = title;
+      b.disabled = !enabled;
+      nav.append(b); // in this order (button() puts each first)
+    }
+    body.replaceChildren();
+    await showLineBlocks(body, {
+      count,
+      blockSize,
+      wrap,
+      firstNo: first + 1,
+      digits: String(index.lines).length,
+      lines: async (from, n) => (await host.bigText.lines(first + from, n)).split('\n'),
+      // Rows a block takes, estimated from its size in bytes
+      rows: (from, n, chars) => (wrap ? Math.max(n, Math.ceil((startOf(first + from + n) - startOf(first + from)) / chars)) : n),
+    });
+    const view = container.closest('.view');
+    if (!view || !scrollTo) return;
+    if (scrollTo === 'start') { view.scrollTop = 0; return; }
+    // To the end: again once the last lines are in (their real heights replace the estimates), until it's settled
+    for (let i = 0, last = -1; i < 20 && view.scrollHeight !== last; i++) {
+      last = view.scrollHeight;
+      view.scrollTop = last;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  };
+  await showPart(part);
 }
 
 /* ---------- JSON ---------- */

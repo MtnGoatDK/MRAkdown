@@ -344,6 +344,12 @@ sealed class NoteIndex
         return "attachments/" + Uri.EscapeDataString(Path.GetFileName(target));
     }
 
+    /// <summary>A large text file's line index, for reading it in parts (see <see cref="BigTextFile"/>).</summary>
+    public string BigTextIndex(string rel) => BigTextFile.IndexJson(ExistingFile(rel));
+
+    /// <summary>Lines of a large text file (0-based from, up to count of them).</summary>
+    public string BigTextLines(string rel, long from, int count) => BigTextFile.Lines(ExistingFile(rel), from, count);
+
     /// <summary>Overwrites a file, keeping its encoding (see <see cref="TextFiles"/>).</summary>
     public void Save(string rel, string text) => TextFiles.Write(ExistingFile(rel), text);
 
@@ -393,8 +399,19 @@ sealed class NoteIndex
         if (full is not null && !IsMarkdown(full))
         {
             var name = Path.GetFileName(full);
-            if (text is null && new FileInfo(full).Length > TextFiles.MaxSize)
-                return JsonSerializer.Serialize(new { path = rel, title = name, markdown = false, tooLarge = true }, Json);
+            var size = new FileInfo(full).Length;
+            if (text is null && size > TextFiles.MaxSize)
+            {
+                // Too large to load whole: a text file is read in parts, as the page shows them (see BigTextFile)
+                var head = new byte[64 * 1024];
+                using (var file = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    head = head[..file.Read(head)];
+                if (TextFiles.IsBinary(head))
+                    return JsonSerializer.Serialize(new { path = rel, title = name, markdown = false, binary = true }, Json);
+                if (!BigTextFile.CanShow(full))
+                    return JsonSerializer.Serialize(new { path = rel, title = name, markdown = false, tooLarge = true }, Json);
+                return JsonSerializer.Serialize(new { path = rel, title = name, markdown = false, big = true, size }, Json);
+            }
             var bytes = text is null ? File.ReadAllBytes(full) : null;
             if (bytes is not null && TextFiles.IsBinary(bytes))
                 return JsonSerializer.Serialize(new { path = rel, title = name, markdown = false, binary = true }, Json);

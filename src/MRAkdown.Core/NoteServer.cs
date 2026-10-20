@@ -66,6 +66,10 @@ static class NoteServer
         {
             ("/__api/note", false) => PageResponse.Json(index.RenderJson(note)),
             ("/__api/source", false) => PageResponse.Text(index.ReadSource(note)),
+            // Large text files, read in parts: the line index, and lines from..from+count
+            ("/__api/text-index", false) => PageResponse.Json(index.BigTextIndex(note)),
+            ("/__api/text-lines", false) => PageResponse.Text(index.BigTextLines(note,
+                long.Parse(query["from"] ?? "0"), Math.Clamp(int.Parse(query["count"] ?? "200"), 1, 100_000))),
             ("/__api/render", true) => PageResponse.Json(index.RenderJson(note, BodyText())),
             ("/__api/save", true) => SaveNote(),
             // Renames the file (to: its new name); the new path, or 409 with the reason it can't be renamed
