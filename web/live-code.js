@@ -63,6 +63,7 @@ export function createCodeSurface(parent, host) {
   const root = document.createElement('div');
   parent.append(root);
   const view = new EditorView({ parent: root, state: EditorState.create({ doc: '', extensions: extensions() }) });
+  let known = { text: '', doc: view.state.doc }; // a document known to equal a text (see differs)
 
   return {
     element: view.contentDOM,
@@ -71,7 +72,21 @@ export function createCodeSurface(parent, host) {
     setLanguage(kind) { if (LANGUAGES[kind]) language = kind; },
     get value() { return view.state.doc.toString(); },
     /** Replaces the whole text with a fresh document (and a fresh undo history), in the current language. */
-    set value(text) { view.setState(EditorState.create({ doc: text, extensions: extensions() })); },
+    set value(text) {
+      view.setState(EditorState.create({ doc: text, extensions: extensions() }));
+      known = { text, doc: view.state.doc };
+    },
+    /**
+     * True if the text differs from text, without building the whole text on every keystroke: edited documents share
+     * their unchanged parts with the one they came from, so comparing with a known document is quick.
+     */
+    differs(text) {
+      const { doc } = view.state;
+      if (known.text === text) return !doc.eq(known.doc);
+      if (doc.length !== text.length || doc.toString() !== text) return true;
+      known = { text, doc };
+      return false;
+    },
     get selectionStart() { return view.state.selection.main.from; },
     get selectionEnd() { return view.state.selection.main.to; },
     setSelectionRange(start, end) {

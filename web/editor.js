@@ -203,7 +203,8 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
     }
     return (await res.json()).link;
   }
-  const isDirty = () => note !== null && surface.value !== saved;
+  // Checked on every keystroke: surfaces that can compare without building the whole text (big files) do so.
+  const isDirty = () => note !== null && (surface.differs ? surface.differs(saved) : surface.value !== saved);
   const sameAs = (n) => note !== null && n !== null && !n.draft && !note.draft && n.root === note.root && n.path === note.path;
 
   /**

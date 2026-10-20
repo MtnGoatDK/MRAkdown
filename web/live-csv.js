@@ -80,10 +80,12 @@ export function createCsvSurface(parent, host) {
         <button type="button" data-op="deleteColumn" title="Delete the current column">− Column</button>
       </span>
     </div>
-    <div class="live-csv-wrap"><table class="live-csv-table"><tbody></tbody></table></div>`;
+    <div class="live-csv-wrap"><table class="live-csv-table"><colgroup></colgroup><tbody></tbody></table></div>`;
   parent.append(root);
   const info = root.querySelector('.live-csv-info');
   const wrap = root.querySelector('.live-csv-wrap');
+  const table = root.querySelector('table');
+  const colgroup = root.querySelector('colgroup');
   const tbody = root.querySelector('tbody');
 
   let sep = ',';
@@ -95,8 +97,16 @@ export function createCsvSurface(parent, host) {
   const undoStack = [];
   const redoStack = [];
   let typing = false; // edits in one cell, until another cell gets focus, are one undo step
+  // For telling quickly whether the table still equals a text (see differs)
+  let base = '';            // the text the rows were read from
+  let restructured = false; // rows or columns added or removed since
+  const edited = new Set(); // rows with edited cells since
 
-  const columns = () => Math.max(1, ...rows.map((r) => r.cells.length));
+  const columns = () => {
+    let n = 1;
+    for (const row of rows) if (row.cells.length > n) n = row.cells.length;
+    return n;
+  };
 
   function cellText(cell) {
     if (!cell.changed) return cell.raw;
@@ -112,6 +122,9 @@ export function createCsvSurface(parent, host) {
     sep = /\.tsv$/i.test(title) ? '\t' : detectSeparator(text);
     rows = parse(text, sep);
     endsWithNewline = text.endsWith('\n');
+    base = text;
+    restructured = false;
+    edited.clear();
     if (!rows.length) rows = [{ cells: [newCell()], raw: '', changed: true }];
     render();
   }
@@ -150,7 +163,27 @@ export function createCsvSurface(parent, host) {
     }
     const dataRows = headerRow() ? rows.length - 1 : rows.length;
     info.textContent = `${dataRows.toLocaleString()} rows · ${cols} columns · separated by ${SEPARATOR_NAMES[sep]}`;
+    fixWidths();
     if (keepFocus) focusCell(current.r, current.c);
+  }
+
+  // Column widths are measured once with the browser's automatic table layout, then fixed: with automatic layout,
+  // every keystroke in a cell makes the browser lay out the whole table again (slow with many rows).
+  function fixWidths() {
+    table.style.tableLayout = '';
+    table.style.width = '';
+    colgroup.replaceChildren();
+    const first = tbody.rows[0];
+    if (!first) return;
+    const widths = [...first.cells].map((cell) => Math.ceil(cell.getBoundingClientRect().width) + 1);
+    if (!widths.some((w) => w > 1)) return; // not shown right now: keep the automatic layout
+    for (const w of widths) {
+      const col = document.createElement('col');
+      col.style.width = `${w}px`;
+      colgroup.append(col);
+    }
+    table.style.width = `${widths.reduce((a, b) => a + b, 0)}px`;
+    table.style.tableLayout = 'fixed';
   }
 
   function focusCell(r, c) {
@@ -185,6 +218,7 @@ export function createCsvSurface(parent, host) {
     cell.value = value;
     cell.changed = true;
     row.changed = true;
+    edited.add(row);
   }
 
   const OPS = {
@@ -225,6 +259,7 @@ export function createCsvSurface(parent, host) {
     remember();
     typing = false;
     OPS[op]();
+    restructured = true;
     render(true);
     changed();
   });
@@ -299,8 +334,33 @@ export function createCsvSurface(parent, host) {
     restore(redoStack.pop());
   }
 
+  /** True if the table's text differs from text, without writing out the whole table on every keystroke. */
+  function differs(text) {
+    if (text === base) return restructured || [...edited].some((row) => rowText(row) !== row.raw);
+    if (serialize() !== text) return true;
+    settle(text);
+    return false;
+  }
+
+  // The table equals text (just saved): edited rows take their current text as their original, for quick comparing.
+  function settle(text) {
+    for (const row of rows) {
+      if (!row.changed) continue;
+      for (const cell of row.cells) {
+        cell.raw = cellText(cell);
+        cell.changed = false;
+      }
+      row.raw = row.cells.map((cell) => cell.raw).join(sep);
+      row.changed = false;
+    }
+    base = text;
+    restructured = false;
+    edited.clear();
+  }
+
   return {
     element: root,
+    differs,
     root,
     get value() { return serialize(); },
     /** Shows a file's text as a table (and starts a fresh undo history). */
