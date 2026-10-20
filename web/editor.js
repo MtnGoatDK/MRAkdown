@@ -291,7 +291,8 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
     }
     if (!isDirty()) return true;
     const target = note;
-    const text = surface.value;
+    // A surface may save a different layout of its text (a minified JSON file formatted in Live: on one line again)
+    const text = surface.textForSave ? surface.textForSave(saved) : surface.value;
     if (!(await write(target, { text, saved, crlf }))) return false;
     if (sameAs(target)) {
       saved = text;

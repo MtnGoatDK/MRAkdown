@@ -21,8 +21,9 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
   show formatted, and the line the cursor is on (or the table it's in) shows its Markdown. The file stays exactly the
   text you type. For JSON and XML files, Live edits the text while it looks like the Read view's tree (the same
   colours, collapsible branches with their size shown, guide lines per level), with JSON syntax errors marked as you
-  type. Format and Minify re-indent JSON or put it on one line without changing any value. Very long lines show only
-  their start; a minified file (one huge line) is read-only in Live until you Format it; for CSV and TSV files it's the Read view's table, editable, where you can add and remove rows and columns, and
+  type. Format spreads JSON over indented lines without changing any value (a file that was on one line is saved on
+  one line again), and right-clicking a branch puts just that object or array on one line or spreads it out. Very long
+  lines show only their start; a minified file (one huge line) is read-only in Live until you Format it; for CSV and TSV files it's the Read view's table, editable, where you can add and remove rows and columns, and
   only the cells you change are rewritten in the file. **Split** shows the text and a live preview side by side. Pasted or dropped images are saved in an
   `attachments` folder next to the file.
 - **Saving when you choose:** a tab keeps its unsaved edits (marked with a dot) until you save them with `Ctrl+S`,

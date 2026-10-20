@@ -114,13 +114,17 @@ class More extends WidgetType {
 }
 
 /**
- * Re-indents JSON (indent: the text for one level), or with indent null puts it all on one line. Only the spaces and
- * line breaks between values change: strings, numbers and escapes are kept exactly as written.
+ * Lays out JSON again. layout: 'minified' (one line, no spaces), 'inline' (one line, a space after "," and ":"), or
+ * the text for one level of indentation (spread over lines; base: the indentation of the first line, for a branch
+ * inside a file). Only the spaces and line breaks between values change: strings, numbers and escapes are kept
+ * exactly as written.
  */
-function reflowJson(text, indent) {
+function reflowJson(text, layout, base = '') {
   const out = [];
   const pad = [];
-  const newline = (depth) => (indent === null ? '' : (pad[depth] ??= '\n' + indent.repeat(depth)));
+  const spread = layout !== 'minified' && layout !== 'inline';
+  const newline = (depth) => (spread ? (pad[depth] ??= '\n' + base + layout.repeat(depth)) : '');
+  const comma = layout === 'inline' ? ', ' : ',';
   let depth = 0;
   for (let i = 0; i < text.length;) {
     const ch = text[i];
@@ -155,10 +159,10 @@ function reflowJson(text, indent) {
       out.push(newline(depth) + ch);
       i++;
     } else if (ch === ',') {
-      out.push(',' + newline(depth));
+      out.push(spread ? ',' + newline(depth) : comma);
       i++;
     } else if (ch === ':') {
-      out.push(indent === null ? ':' : ': ');
+      out.push(layout === 'minified' ? ':' : ': ');
       i++;
     } else {
       // A number, true, false or null
@@ -170,6 +174,12 @@ function reflowJson(text, indent) {
   }
   return out.join('');
 }
+
+/** True for JSON written on one line (minified), with at most a line break at the end. */
+const isOneLine = (text) => {
+  const i = text.indexOf('\n');
+  return i === -1 || i === text.length - 1;
+};
 
 /** The length of a text's longest line. */
 function longestLine(text) {
@@ -226,8 +236,7 @@ export function createCodeSurface(parent, host) {
       <div class="viewer-actions">
         <button type="button" data-op="expand">Expand all</button>
         <button type="button" data-op="collapse">Collapse all</button>
-        <button type="button" data-op="format" title="Spread the JSON over indented lines (values stay exactly as written; Undo reverts it)">Format</button>
-        <button type="button" data-op="minify" title="Put the JSON on one line (values stay exactly as written; Undo reverts it)">Minify</button>
+        <button type="button" data-op="format" title="Spread the JSON over indented lines, to read and edit it. Values stay exactly as written; a file that was on one line (minified) is saved on one line again.">Format</button>
       </div>
     </div>`;
   const info = header.querySelector('.viewer-info');
@@ -239,8 +248,7 @@ export function createCodeSurface(parent, host) {
     const op = e.target.closest('button')?.dataset.op;
     if (op === 'collapse') collapseFrom(1, BUTTON_BUDGET_MS);
     else if (op === 'expand') unfoldAll(view);
-    else if (op === 'format') reflow('  ');
-    else if (op === 'minify') reflow(null);
+    else if (op === 'format') format();
   });
   root.append(header);
 
@@ -371,7 +379,7 @@ export function createCodeSurface(parent, host) {
     EditorView.updateListener.of((u) => {
       if (!u.docChanged) return;
       host.onInput();
-      // Undoing or redoing Format/Minify changes whether the file has long lines
+      // Undoing or redoing Format changes whether the file has long lines
       if (u.transactions.some((tr) => tr.isUserEvent('undo') || tr.isUserEvent('redo'))) {
         setTimeout(() => setMode(modeFor(view.state.doc.toString())));
       }
@@ -398,25 +406,85 @@ export function createCodeSurface(parent, host) {
     if (effects.length) view.dispatch({ effects });
   }
 
-  /** Format (indent: one level's text) or Minify (null) the JSON, as one edit. Only for valid JSON. */
-  function reflow(indent) {
-    const text = view.state.doc.toString();
+  /**
+   * Format: spreads the JSON over indented lines, as one edit (Undo reverts it). Only for valid JSON. Only the layout
+   * changes, so the formatted text still counts as the text it came from: no unsaved changes until you edit it, and
+   * a file that was on one line is saved on one line again (see textForSave).
+   */
+  function format() {
+    const before = view.state.doc;
+    const text = before.toString();
     try {
       JSON.parse(text);
     } catch {
       return; // the summary already says what's wrong
     }
-    let result = reflowJson(text, indent);
+    let result = reflowJson(text, '  ');
     if (text.endsWith('\n')) result += '\n';
     if (result === text) return;
-    // Turning parsing off before the edit, or on after it, so the parser never reads one huge line
-    const next = modeFor(result);
-    if (indent) unit = indent.length;
-    if (!next.parse) setMode({ ...mode, parse: false });
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: result }, userEvent: 'input.format', scrollIntoView: false });
-    setMode(next);
+    const equivalent = before.eq(known.doc) ? known.text : text;
+    unit = 2;
+    view.dispatch({ changes: { from: 0, to: before.length, insert: result }, userEvent: 'input.format', scrollIntoView: false });
+    known = { text: equivalent, doc: view.state.doc };
+    setMode(modeFor(result));
     root.scrollTop = 0;
+    host.onInput(); // the unsaved state, now that the formatted text counts as the file's
   }
+
+  /** JSON: one branch (an object or array) on one line, or spread over lines, as one edit. */
+  function layoutBranch(node, layout) {
+    const { state } = view;
+    const text = state.sliceDoc(node.from, node.to);
+    const line = state.doc.lineAt(node.from);
+    const base = /^ */.exec(state.sliceDoc(line.from, Math.min(line.to, line.from + 1000)))[0];
+    const result = reflowJson(text, layout, base);
+    if (result !== text) view.dispatch({ changes: { from: node.from, to: node.to, insert: result }, userEvent: 'input.format' });
+  }
+
+  /** The JSON branch a right-click is about: the object or array clicked in, or a property's object/array value. */
+  function branchAt(pos) {
+    for (let node = syntaxTree(view.state).resolveInner(pos, 1); node; node = node.parent) {
+      if (node.name === 'Property' && KINDS.json.isBranch(node.lastChild)) return node.lastChild;
+      if (KINDS.json.isBranch(node)) return node;
+    }
+    return null;
+  }
+
+  // Right-click in JSON: a small menu to put the branch there on one line or spread it over lines
+  let menu = null;
+  const closeMenu = () => { menu?.remove(); menu = null; };
+  addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target)) closeMenu(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  addEventListener('wheel', closeMenu, { passive: true });
+  root.addEventListener('contextmenu', (e) => {
+    if (kind !== 'json' || !mode.parse || view.state.readOnly || !e.target.closest('.cm-content')) return;
+    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+    const node = pos == null ? null : branchAt(pos);
+    if (!node) return;
+    e.preventDefault();
+    closeMenu();
+    const what = `${node.name === 'Object' ? 'object' : 'array'} (${KINDS.json.summary(node)})`;
+    const multiLine = view.state.doc.lineAt(node.from).number !== view.state.doc.lineAt(node.to).number;
+    menu = document.createElement('div');
+    menu.className = 'context-menu';
+    menu.setAttribute('role', 'menu');
+    for (const [label, layout, enabled] of [
+      [`Put this ${what} on one line`, 'inline', multiLine],
+      [`Spread this ${what} over lines`, '  ', !multiLine],
+    ]) {
+      const btn = document.createElement('button');
+      btn.setAttribute('role', 'menuitem');
+      btn.textContent = label;
+      btn.disabled = !enabled;
+      btn.onclick = () => { closeMenu(); layoutBranch(node, layout); view.focus(); };
+      menu.append(btn);
+    }
+    document.body.append(menu);
+    const { width, height } = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(4, Math.min(e.clientX, innerWidth - width - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(e.clientY, innerHeight - height - 4))}px`;
+    menu.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
+  });
 
   /**
    * Collapses the branches from a level down (0 is the outermost), as the Read view shows them. False if reading the
@@ -478,10 +546,29 @@ export function createCodeSurface(parent, host) {
      */
     differs(text) {
       const { doc } = view.state;
-      if (known.text === text) return !doc.eq(known.doc);
+      if (known.text === text && doc.eq(known.doc)) return false;
       if (doc.length !== text.length || doc.toString() !== text) return true;
       known = { text, doc };
       return false;
+    },
+    /**
+     * The text to save. A JSON file that was on one line (minified) is saved on one line again after Format: only the
+     * layout changes, values stay exactly as written. saved: the file's text as last loaded or saved.
+     */
+    textForSave(saved) {
+      const { doc } = view.state;
+      if (doc.eq(known.doc)) return known.text;
+      const text = doc.toString();
+      if (kind !== 'json' || !saved.trim() || !isOneLine(saved) || isOneLine(text)) return text;
+      try {
+        JSON.parse(text);
+      } catch {
+        return text; // not valid JSON: saved as it is
+      }
+      let result = reflowJson(text, 'minified');
+      if (saved.endsWith('\n')) result += '\n';
+      known = { text: result, doc };
+      return result;
     },
     get selectionStart() { return view.state.selection.main.from; },
     get selectionEnd() { return view.state.selection.main.to; },
