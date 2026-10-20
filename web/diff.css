@@ -87,21 +87,12 @@
 }
 .diff-fold:hover td { color: var(--text); }
 
+/* light/dark pairs, as in app.css */
 :root {
-  --diff-del: rgba(220, 38, 38, 0.10);
-  --diff-ins: rgba(22, 163, 74, 0.11);
-  --diff-del-word: rgba(220, 38, 38, 0.28);
-  --diff-ins-word: rgba(22, 163, 74, 0.30);
-  --diff-del-text: #b91c1c;
-  --diff-ins-text: #15803d;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --diff-del: rgba(248, 81, 73, 0.14);
-    --diff-ins: rgba(63, 185, 80, 0.15);
-    --diff-del-word: rgba(248, 81, 73, 0.38);
-    --diff-ins-word: rgba(63, 185, 80, 0.38);
-    --diff-del-text: #f87171;
-    --diff-ins-text: #4ade80;
-  }
+  --diff-del: light-dark(rgba(220, 38, 38, 0.10), rgba(248, 81, 73, 0.14));
+  --diff-ins: light-dark(rgba(22, 163, 74, 0.11), rgba(63, 185, 80, 0.15));
+  --diff-del-word: light-dark(rgba(220, 38, 38, 0.28), rgba(248, 81, 73, 0.38));
+  --diff-ins-word: light-dark(rgba(22, 163, 74, 0.30), rgba(63, 185, 80, 0.38));
+  --diff-del-text: light-dark(#b91c1c, #f87171);
+  --diff-ins-text: light-dark(#15803d, #4ade80);
 }

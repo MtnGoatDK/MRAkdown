@@ -6,13 +6,15 @@
   <link rel="icon" href="/__app/logo.svg">
   <link rel="stylesheet" href="/__app/app.css">
   <script>
-    // Apply the saved accent colour before first paint, so there is no flash of the default.
+    // Apply the saved accent colour and theme before first paint, so there is no flash of the defaults.
     try {
       const accent = JSON.parse(localStorage.getItem('accent'));
       if (accent) {
         document.documentElement.style.setProperty('--accent-light', accent.light);
         document.documentElement.style.setProperty('--accent-dark', accent.dark);
       }
+      const theme = JSON.parse(localStorage.getItem('theme'));
+      if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
     } catch { /* storage unavailable */ }
   </script>
   <script defer src="/__app/app.js"></script>
@@ -70,6 +72,7 @@
           <span class="format-sep" aria-hidden="true"></span>
           <!-- The modes are named for what they are: data-mode="live" is Edit (edit it as it looks), data-mode="edit"
                is Source (the plain text). The internal names stay, so saved settings and shortcuts keep working. -->
+          <span class="mode-switch" role="group" aria-label="View">
           <button data-mode="read" data-shortcut="toggleLive" data-hint="Read ({keys})" title="Read" aria-label="Read">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h7a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H2zM22 5h-7a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h8z"/></svg>
           </button>
@@ -82,6 +85,7 @@
           <button data-mode="split" data-shortcut="toggleSplit" data-hint="Split: source and preview ({keys})" title="Split: source and preview" aria-label="Split view">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>
           </button>
+          </span>
         </div>
       </div>
       <div class="pane-body">

@@ -1,18 +1,11 @@
 /* Viewers for non-Markdown files (text, JSON, CSV, XML). Loaded with viewers.js. */
 
+/* light/dark pairs, as in app.css */
 :root {
-  --v-str: #0a7a3a;
-  --v-num: #1d4ed8;
-  --v-lit: #9333ea;
-  --v-attr: #b45309;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --v-str: #7ec699;
-    --v-num: #79b8ff;
-    --v-lit: #c792ea;
-    --v-attr: #f0b37e;
-  }
+  --v-str: light-dark(#0a7a3a, #7ec699);
+  --v-num: light-dark(#1d4ed8, #79b8ff);
+  --v-lit: light-dark(#9333ea, #c792ea);
+  --v-attr: light-dark(#b45309, #f0b37e);
 }
 
 .markdown.viewer-wide { max-width: none; }

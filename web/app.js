@@ -167,12 +167,33 @@ function renderTree() {
   markActive();
 }
 
+/* Small icons in the sidebar (Lucide shapes), by file type */
+const ICON_PATHS = {
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  markdown: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13H8"/><path d="M16 17H8"/><path d="M16 13h-2"/>',
+  json: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
+  csv: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/>',
+  xml: '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  image: '<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+};
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif']);
+function treeIcon(kind) {
+  return `<svg class="tree-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[kind]}</svg>`;
+}
+function fileIconKind(path) {
+  const ext = path.includes('.') ? path.split('.').pop().toLowerCase() : '';
+  if (ext === 'md' || ext === 'markdown') return 'markdown';
+  if (IMAGE_EXTS.has(ext) || ext === 'svg') return 'image';
+  return { json: 'json', csv: 'csv', xml: 'xml' }[VIEWER_KIND_BY_EXT[ext]] ?? 'file';
+}
+
 function fileItem(n) {
   const el = document.createElement('div');
   el.className = 'tree-item file' + (n.path === currentPath() ? ' active' : '');
   el.dataset.path = n.path;
   el.title = n.path;
-  el.innerHTML = `<span>${esc(n.name)}</span>`;
+  el.innerHTML = `${treeIcon(fileIconKind(n.path))}<span>${esc(n.name)}</span>`;
   el.onclick = (e) => openIn(currentRoot, n.path, clickTarget(e));
   el.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); }); // no autoscroll
   el.addEventListener('auxclick', (e) => { if (e.button === 1) openIn(currentRoot, n.path, clickTarget(e, true)); });
@@ -280,7 +301,7 @@ function buildNode(n, root) {
   const expanded = expandedFor(root);
   const el = document.createElement('div');
   el.className = 'tree-item folder' + (expanded.has(n.path) ? '' : ' collapsed');
-  el.innerHTML = `<svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg><span>${esc(n.name)}</span>`;
+  el.innerHTML = `<svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>${treeIcon('folder')}<span>${esc(n.name)}</span>`;
   const children = document.createElement('div');
   children.className = 'tree-children';
   // Build a folder's contents only once it is opened, so huge folders render quickly. In a very large folder the
@@ -1346,7 +1367,8 @@ async function highlightCode(root) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = `/__app/${file}`;
-      link.media = `(prefers-color-scheme: ${scheme})`;
+      link.dataset.scheme = scheme;
+      link.media = themeMedia(scheme);
       document.head.append(link);
     }
     const script = document.createElement('script');
@@ -1750,6 +1772,40 @@ function applyAccent(accent) {
   store.set('accent', accent);
 }
 
+/* ---------- Theme ---------- */
+
+// 'system' follows Windows/GNOME; 'light' or 'dark' is set on <html data-theme> (and before first paint, in app.html)
+const THEMES = { system: 'System', light: 'Light', dark: 'Dark' };
+const currentTheme = () => document.documentElement.dataset.theme ?? 'system';
+
+/** The media attribute for a stylesheet that's for one scheme (highlight.js's light and dark styles). */
+function themeMedia(scheme) {
+  const theme = currentTheme();
+  return theme === 'system' ? `(prefers-color-scheme: ${scheme})` : theme === scheme ? 'all' : 'not all';
+}
+
+function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  store.set('theme', theme === 'system' ? null : theme);
+  for (const link of document.querySelectorAll('link[data-scheme]')) link.media = themeMedia(link.dataset.scheme);
+  applyAppearance();
+}
+
+// Windows 11: the window can show the translucent Mica backdrop behind the sidebar and tab bar (a setting)
+const canMica = Boolean(window.hostBackdrops?.includes('mica'));
+const systemDark = matchMedia('(prefers-color-scheme: dark)');
+const isDark = () => currentTheme() === 'dark' || (currentTheme() === 'system' && systemDark.matches);
+
+/** Tells the Windows host the theme (for the window frame and Mica's tint) and whether to show Mica. */
+function applyAppearance() {
+  const mica = canMica && store.get('mica', false);
+  document.body.classList.toggle('mica', mica);
+  if (window.hostWindowControls?.nativeDrag) post({ type: 'appearance', dark: isDark(), mica });
+}
+systemDark.addEventListener('change', applyAppearance);
+applyAppearance();
+
 let settingsPanel = null;
 
 function closeSettingsPanel() {
@@ -1767,7 +1823,12 @@ function toggleSettingsPanel() {
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', 'Settings');
   panel.innerHTML = `
-    <div class="settings-title">Accent colour</div>
+    <div class="settings-title">Theme</div>
+    <div class="segmented theme-choice" role="radiogroup" aria-label="Theme">
+      ${Object.entries(THEMES).map(([value, label]) => `<button role="radio" data-theme="${value}">${label}</button>`).join('')}
+    </div>
+    ${canMica ? '<label class="settings-check settings-mica"><input type="checkbox" class="mica"> Translucent background</label>' : ''}
+    <div class="settings-title settings-section">Accent colour</div>
     <div class="swatches">
       ${ACCENTS.map((a, i) => `<button class="swatch" data-i="${i}" title="${a.name}" aria-label="${a.name}"
         style="--c-light:${a.light};--c-dark:${a.dark}"></button>`).join('')}
@@ -1784,6 +1845,16 @@ function toggleSettingsPanel() {
     </div>
     <div class="settings-title settings-section">Keyboard shortcuts</div>
     <button class="settings-button change-shortcuts">Change shortcuts…</button>`;
+
+  const themeButtons = [...panel.querySelectorAll('.theme-choice button')];
+  const markTheme = () => themeButtons.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.theme === currentTheme())));
+  markTheme();
+  for (const b of themeButtons) b.onclick = () => { applyTheme(b.dataset.theme); markTheme(); };
+  const micaBox = panel.querySelector('input.mica');
+  if (micaBox) {
+    micaBox.checked = store.get('mica', false);
+    micaBox.onchange = () => { store.set('mica', micaBox.checked); applyAppearance(); };
+  }
 
   const swatches = [...panel.querySelectorAll('.swatch')];
   const customInput = panel.querySelector('input[type="color"]');

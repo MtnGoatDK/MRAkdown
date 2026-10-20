@@ -38,9 +38,10 @@ sealed partial class MainForm : Form
         Size = new Size(1200, 800);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-        _web.DefaultBackgroundColor = IsDarkMode() ? Color.FromArgb(30, 30, 30) : Color.White;
+        // Until the page says otherwise (see MainForm.Backdrop.cs): the system theme, no backdrop
+        _web.DefaultBackgroundColor = _dark ? Color.FromArgb(30, 30, 30) : Color.White;
         // Shows in the thin resize strip above the page, so it matches the tab bar (--bg-side in app.css).
-        BackColor = IsDarkMode() ? Color.FromArgb(38, 38, 38) : Color.FromArgb(246, 246, 246);
+        BackColor = _dark ? Color.FromArgb(38, 38, 38) : Color.FromArgb(246, 246, 246);
         Controls.Add(_web);
 
         Roots.Changed += OnRootChanged;
@@ -205,6 +206,9 @@ sealed partial class MainForm : Form
                 if (_maximized) PostToPage(new { type = "windowState", maximized = true });
                 break;
             // The page's window buttons (see MainForm.TitleBar.cs)
+            case "appearance":
+                SetAppearance(m.GetProperty("dark").GetBoolean(), m.GetProperty("mica").GetBoolean());
+                break;
             case "minimize":
                 WindowState = FormWindowState.Minimized;
                 break;
@@ -403,10 +407,6 @@ sealed partial class MainForm : Form
     {
         base.OnHandleCreated(e);
         ApplyFrame();
-        if (IsDarkMode())
-        {
-            var on = 1;
-            DwmSetWindowAttribute(Handle, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, ref on, sizeof(int));
-        }
+        ApplyAppearance();
     }
 }

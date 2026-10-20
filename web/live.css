@@ -9,9 +9,14 @@
 .live-editor .cm-content {
   max-width: 760px;
   margin: 0 auto;
-  padding: 28px 48px 160px;
+  padding: 0 48px 160px;
   caret-color: var(--text);
 }
+/* Markdown (live.js): the outer element scrolls, with the note's title above the text, in the Read view's column */
+.live-surface.live-md-root { display: block; overflow: auto; background: var(--bg); }
+.live-md-root > .live-editor { height: auto; }
+.live-md-root > .live-editor .cm-scroller { overflow: visible; }
+.live-md-head { max-width: 760px; margin: 0 auto; padding: 36px 48px 0; }
 .live-editor .cm-line { padding: 0; }
 .live-editor .cm-cursor { border-left-color: var(--text); }
 .live-editor .cm-selectionBackground, .live-editor.cm-focused .cm-selectionBackground,
@@ -98,12 +103,34 @@
   font-weight: 600;
 }
 
-/* Headings, sized as in the reading view */
-.live-editor .cm-lp-h1 { font-size: 1.8em; line-height: 1.3; padding-top: 0.6em !important; }
-.live-editor .cm-lp-h2 { font-size: 1.5em; line-height: 1.3; padding-top: 0.5em !important; }
-.live-editor .cm-lp-h3 { font-size: 1.25em; line-height: 1.35; padding-top: 0.4em !important; }
-.live-editor .cm-lp-h4 { font-size: 1.1em; padding-top: 0.3em !important; }
-.live-editor .cm-lp-h5, .live-editor .cm-lp-h6 { color: var(--muted); }
+/* Spacing as in the reading view (app.css .markdown): a blank line is the 1em between paragraphs, and a heading's
+   space above adds up, with that blank line, to its 1.4em margin there */
+.live-editor .cm-lp-blank { line-height: 1em; }
+.live-editor .cm-lp-h1 { font-size: 1.8em; line-height: 1.3; padding-top: 0.85em !important; }
+.live-editor .cm-lp-h2 { font-size: 1.5em; line-height: 1.3; padding-top: 0.73em !important; }
+.live-editor .cm-lp-h3 { font-size: 1.25em; line-height: 1.3; padding-top: 0.6em !important; }
+.live-editor .cm-lp-h4 { font-size: 1.1em; line-height: 1.3; padding-top: 0.5em !important; }
+.live-editor .cm-lp-h5, .live-editor .cm-lp-h6 { line-height: 1.3; padding-top: 0.4em !important; color: var(--muted); }
+.live-editor :is(.cm-lp-h1, .cm-lp-h2, .cm-lp-h3, .cm-lp-h4, .cm-lp-h5, .cm-lp-h6),
+.live-editor :is(.cm-lp-h1, .cm-lp-h2, .cm-lp-h3, .cm-lp-h4, .cm-lp-h5, .cm-lp-h6) * { font-weight: 650 !important; }
+/* Lists: each level 1.6em in, the bullet or number in that space (ul/ol padding-left 1.6em, li margin 0.15em) */
+.live-editor .cm-lp-li { padding: 0.075em 0 0.075em calc((var(--depth) - 1) * 1.6em) !important; }
+.live-editor .cm-lp-li.cm-lp-task { padding-left: calc((var(--depth) - 1) * 1.6em + 0.4em) !important; }
+.live-editor .cm-lp-ol { display: inline-block; min-width: 1.6em; padding-right: 0.4em; color: var(--faint); text-align: right; }
+/* Front matter: one small line, as Read mode doesn't show it */
+.live-editor .cm-lp-props {
+  margin: 0 0 1em;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: var(--hover);
+  color: var(--faint);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+.live-editor .cm-lp-props-label { margin-right: 8px; color: var(--muted); font-weight: 600; }
 
 .live-editor .cm-lp-link { color: var(--accent); cursor: pointer; }
 .live-editor .cm-lp-link:hover { text-decoration: underline; }
@@ -114,9 +141,9 @@
   font: 0.875em "Cascadia Code", Consolas, monospace;
 }
 .live-editor .cm-lp-highlight { background: var(--mark); border-radius: 2px; }
-.live-editor .cm-lp-bullet { display: inline-block; width: 1.1em; color: var(--faint); }
-.live-editor .cm-lp-checkbox { margin: 0 0.45em 0 0; vertical-align: -1px; accent-color: var(--accent); cursor: pointer; }
-.live-editor .cm-lp-image { display: block; max-width: 100%; margin: 0.4em 0; border-radius: 4px; }
+.live-editor .cm-lp-bullet { display: inline-block; width: 1.6em; padding-right: 0.55em; color: var(--faint); text-align: right; }
+.live-editor .cm-lp-checkbox { cursor: pointer; }
+.live-editor .cm-lp-image { max-width: 100%; border-radius: 4px; }
 .live-editor .cm-lp-image.missing { display: inline; width: 1em; height: 1em; opacity: 0.4; }
 
 /* Quotes and callouts */

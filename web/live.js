@@ -30,6 +30,17 @@ function activeLines(state, focused) {
   return lines;
 }
 
+/** The length of a text's longest line. */
+function longestLine(text) {
+  let max = 0;
+  for (let start = 0; ;) {
+    const end = text.indexOf('\n', start);
+    max = Math.max(max, (end === -1 ? text.length : end) - start);
+    if (end === -1) return max;
+    start = end + 1;
+  }
+}
+
 /** The range of a YAML front matter block at the start ("---" ... "---"), or null. */
 function frontMatter(doc) {
   const m = doc.sliceString(0, Math.min(doc.length, 20000)).match(/^---[ \t]*\r?\n[\s\S]*?\n---[ \t]*(?=\r?\n|$)/);
@@ -38,12 +49,14 @@ function frontMatter(doc) {
 
 /* ---------- Widgets ---------- */
 
+/** A bullet as the Read view draws it per level: disc, circle, square. */
 class BulletWidget extends WidgetType {
-  eq() { return true; }
+  constructor(depth) { super(); this.depth = depth; }
+  eq(other) { return other.depth === this.depth; }
   toDOM() {
     const el = document.createElement('span');
     el.className = 'cm-lp-bullet';
-    el.textContent = '•';
+    el.textContent = ['•', '◦', '▪'][(this.depth - 1) % 3];
     return el;
   }
 }
@@ -93,6 +106,36 @@ class TextWidget extends WidgetType {
     el.textContent = this.text;
     return el;
   }
+}
+
+/**
+ * Front matter, shown as one small "Properties" line with its keys and values (Read mode doesn't show it); clicking
+ * it puts the cursor in it, which shows the YAML.
+ */
+class PropertiesWidget extends WidgetType {
+  constructor(source, from) { super(); this.source = source; this.from = from; }
+  eq(other) { return other.source === this.source; }
+  toDOM(view) {
+    const el = document.createElement('div');
+    el.className = 'cm-lp-props';
+    const label = document.createElement('span');
+    label.className = 'cm-lp-props-label';
+    label.textContent = 'Properties';
+    el.append(label);
+    // Top-level "key: value" lines; values on lines of their own (lists) are left out of the summary
+    const pairs = this.source.split('\n').slice(1, -1)
+      .map((line) => line.match(/^([^\s:#][^:]*):\s*(.*)$/))
+      .filter(Boolean)
+      .map(([, key, value]) => (value ? `${key}: ${value}` : key));
+    el.append(document.createTextNode(pairs.length ? pairs.join(' · ') : 'none'));
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      view.dispatch({ selection: { anchor: this.from + 4 } });
+      view.focus();
+    });
+    return el;
+  }
+  ignoreEvent() { return false; }
 }
 
 /** A GFM table shown as a table; clicking it puts the cursor in it, which shows its Markdown. */
@@ -239,11 +282,25 @@ function buildDecorations(view, host) {
           return;
         }
         if (name === 'ListMark') {
+          // Laid out as the Read view's lists: each level indented 1.6em, the bullet or number in that space
           const listItem = node.node.parent;
           const isTask = listItem?.getChild('Task');
+          const line = doc.lineAt(node.from);
+          let depth = 0;
+          for (let n = listItem?.parent; n; n = n.parent) if (n.name === 'BulletList' || n.name === 'OrderedList') depth++;
+          if (node.from >= line.from && node.from - line.from <= 40) {
+            ranges.push(Decoration.line({ class: isTask ? 'cm-lp-li cm-lp-task' : 'cm-lp-li', attributes: { style: `--depth: ${depth}` } }).range(line.from));
+          }
           if (isActive(node.from)) return;
+          if (node.from > line.from) add(line.from, node.from, hide); // the indentation: the line's padding shows it
           if (isTask) hideMark(node.from, node.to, true);
-          else if (listItem?.parent?.name === 'BulletList') add(node.from, node.to, Decoration.replace({ widget: new BulletWidget() }));
+          else if (listItem?.parent?.name === 'BulletList') {
+            add(node.from, node.to, Decoration.replace({ widget: new BulletWidget(depth) }));
+            if (doc.sliceString(node.to, node.to + 1) === ' ') hideMark(node.to, node.to, true);
+          } else {
+            add(node.from, node.to, Decoration.mark({ class: 'cm-lp-ol' }));
+            if (doc.sliceString(node.to, node.to + 1) === ' ') hideMark(node.to, node.to, true);
+          }
           return;
         }
         if (name === 'TaskMarker') {
@@ -268,7 +325,11 @@ function buildDecorations(view, host) {
     // Wikilinks, embeds and ==highlights== aren't in CommonMark/GFM: find them in the text, outside code.
     for (let pos = from; pos <= to;) {
       const line = doc.lineAt(pos);
-      if (!(fm && line.from < fm.to)) inlineExtras(line);
+      if (!(fm && line.from < fm.to)) {
+        inlineExtras(line);
+        // A blank line between blocks is the Read view's space between paragraphs, not a whole line
+        if (!line.text.trim() && !inCode(line.from)) addLine(line.from, 'cm-lp-blank');
+      }
       pos = line.to + 1;
     }
   }
@@ -365,14 +426,23 @@ function buildDecorations(view, host) {
 }
 
 /**
- * Tables are block widgets, which CodeMirror only accepts from a state field (not a view plugin). A table shows its
- * Markdown while the cursor is in it.
+ * Tables and the front matter are block widgets, which CodeMirror only accepts from a state field (not a view
+ * plugin). Each shows its Markdown (YAML) while the cursor is in it. allowed() is false for files with very long
+ * lines: CodeMirror fails to lay out a block widget together with a wrapped line of millions of characters.
  */
-function tableField() {
+function blockField(allowed) {
   const build = (state) => {
     const ranges = [];
+    if (!allowed()) return Decoration.none;
     const active = activeLines(state, true);
     const fm = frontMatter(state.doc);
+    if (fm) {
+      const last = state.doc.lineAt(fm.to);
+      if (![...active].some((n) => n <= last.number)) {
+        const source = state.doc.sliceString(fm.from, fm.to);
+        ranges.push(Decoration.replace({ widget: new PropertiesWidget(source, fm.from), block: true }).range(fm.from, fm.to));
+      }
+    }
     for (let node = syntaxTree(state).topNode.firstChild; node; node = node.nextSibling) {
       if (node.name !== 'Table' || (fm && node.from < fm.to)) continue;
       const first = state.doc.lineAt(node.from);
@@ -435,7 +505,7 @@ export function createLiveSurface(parent, host) {
     syntaxHighlighting(markdownStyle),
     EditorView.lineWrapping,
     editable.of(EditorView.editable.of(!disabled)),
-    tableField(),
+    blockField(() => blockWidgets),
     livePreview,
     // CodeMirror manages its element's classes, so they're given here rather than added afterwards
     EditorView.editorAttributes.of({ class: 'live-editor' }),
@@ -456,9 +526,16 @@ export function createLiveSurface(parent, host) {
   ];
 
   let disabled = true;
-  // Our own element around the editor, for the classes editor.js sets (which surface is in use)
+  let blockWidgets = true; // see blockField
+  // Our own element around the editor, for the classes editor.js sets (which surface is in use). It scrolls, with
+  // the note's title above the text, as in the Read view.
   const root = document.createElement('div');
+  root.className = 'live-md-root';
   parent.append(root);
+  const head = document.createElement('div');
+  head.className = 'live-md-head';
+  head.innerHTML = '<div class="inline-title"></div>';
+  root.append(head);
   const view = new EditorView({ parent: root, state: EditorState.create({ doc: '', extensions: extensions() }) });
   let known = { text: '', doc: view.state.doc }; // a document known to equal a text (see differs)
 
@@ -466,10 +543,14 @@ export function createLiveSurface(parent, host) {
     element: view.contentDOM,
     root,
     view,
-    scrollBox: () => view.scrollDOM,
+    scrollBox: () => root,
     get value() { return view.state.doc.toString(); },
     /** Replaces the whole text with a fresh document (and a fresh undo history). */
     set value(text) {
+      const title = host.title?.() ?? '';
+      head.querySelector('.inline-title').textContent = title;
+      head.hidden = !title;
+      blockWidgets = longestLine(text) <= 10_000;
       view.setState(EditorState.create({ doc: text, extensions: extensions() }));
       known = { text, doc: view.state.doc };
     },
@@ -485,6 +566,9 @@ export function createLiveSurface(parent, host) {
     get selectionEnd() { return view.state.selection.main.to; },
     setSelectionRange(start, end) {
       const len = view.state.doc.length;
+      // The start of a note with front matter: just after it, so the front matter stays a Properties line
+      const fm = start === 0 && end === 0 ? frontMatter(view.state.doc) : null;
+      if (fm) start = end = Math.min(fm.to + 1, len);
       view.dispatch({ selection: { anchor: Math.min(start, len), head: Math.min(end, len) }, scrollIntoView: true });
     },
     replaceSelection(text) {
@@ -498,8 +582,8 @@ export function createLiveSurface(parent, host) {
       disabled = value;
       view.dispatch({ effects: editable.reconfigure(EditorView.editable.of(!value)) });
     },
-    get scrollTop() { return view.scrollDOM.scrollTop; },
-    set scrollTop(value) { view.scrollDOM.scrollTop = value; },
+    get scrollTop() { return root.scrollTop; },
+    set scrollTop(value) { root.scrollTop = value; },
     /**
      * Listens for keydown, paste, dragover or drop before CodeMirror does; a handler that calls preventDefault
      * keeps the event from CodeMirror (e.g. pasting an image, or Ctrl+B).

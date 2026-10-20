@@ -1,36 +1,26 @@
+/* Colours come in light/dark pairs (light-dark()): color-scheme picks one, from the system or the Theme setting
+   (data-theme, set before first paint in app.html). Native controls (dropdowns, checkboxes, inputs, scrollbars)
+   follow it too; WebKitGTK otherwise draws them light. */
 :root {
-  /* Native controls (dropdowns, checkboxes, inputs) follow the theme too; WebKitGTK otherwise draws them light. */
   color-scheme: light dark;
-  --bg: #ffffff;
-  --bg-side: #f6f6f6;
-  --text: #2e3338;
-  --muted: #5c5c5c;
-  --faint: #999999;
-  --border: #e3e3e3;
+  --bg: light-dark(#ffffff, #1e1e1e);
+  --bg-side: light-dark(#f6f6f6, #262626);
+  --text: light-dark(#2e3338, #dadada);
+  --muted: light-dark(#5c5c5c, #b3b3b3);
+  --faint: light-dark(#999999, #6d6d6d);
+  --border: light-dark(#e3e3e3, #363636);
   /* --accent-light / --accent-dark are set from the user's accent colour choice, if any */
-  --accent: var(--accent-light, #c2410c);
-  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  --code-bg: #f5f5f5;
-  --hover: rgba(0, 0, 0, 0.05);
-  --mark: rgba(255, 208, 0, 0.4);
+  --accent: light-dark(var(--accent-light, #c2410c), var(--accent-dark, #ff8a3d));
+  --accent-soft: light-dark(color-mix(in srgb, var(--accent-light, #c2410c) 10%, transparent),
+    color-mix(in srgb, var(--accent-dark, #ff8a3d) 15%, transparent));
+  --code-bg: light-dark(#f5f5f5, #262626);
+  --hover: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06));
+  --mark: light-dark(rgba(255, 208, 0, 0.4), rgba(255, 208, 0, 0.25));
+  --shadow: light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.35));
   --side-w: 260px;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1e1e1e;
-    --bg-side: #262626;
-    --text: #dadada;
-    --muted: #b3b3b3;
-    --faint: #6d6d6d;
-    --border: #363636;
-    --accent: var(--accent-dark, #ff8a3d);
-    --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
-    --code-bg: #262626;
-    --hover: rgba(255, 255, 255, 0.06);
-    --mark: rgba(255, 208, 0, 0.25);
-  }
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -97,22 +87,42 @@ body.side-hidden #sidebar, body.side-hidden #resizer { display: none; }
 .tree-item {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--muted);
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
+  transition: background-color 0.1s, color 0.1s;
 }
+/* Files line up with the icons of folders, which have an arrow before theirs */
+.tree-item.file { padding-left: 28px; }
 .tree-item span { overflow: hidden; text-overflow: ellipsis; }
+.tree-icon { flex-shrink: 0; color: var(--faint); opacity: 0.85; }
 .tree-item:hover { background: var(--hover); color: var(--text); }
-.tree-item.active { background: var(--accent-soft); color: var(--text); }
-.tree-item.folder { color: var(--text); }
+.tree-item.active {
+  position: relative;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text);
+}
+.tree-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.tree-item.active .tree-icon { color: var(--accent); opacity: 1; }
+.tree-item.folder { gap: 4px; color: var(--text); }
+.tree-item.folder .tree-icon { margin-right: 2px; }
 .chev { flex-shrink: 0; width: 14px; color: var(--faint); transition: transform 0.1s; }
 .folder.collapsed .chev { transform: rotate(-90deg); }
 .folder.collapsed + .tree-children { display: none; }
-.tree-children { margin-left: 13px; padding-left: 4px; border-left: 1px solid var(--border); }
+.tree-children { margin-left: 15px; padding-left: 4px; border-left: 1px solid var(--border); }
 .match-dir { margin-left: 8px; color: var(--faint); font-size: 11.5px; }
 .tree-empty { padding: 8px; color: var(--faint); font-size: 13px; }
 
@@ -195,11 +205,13 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   border: 1px solid transparent;
   border-bottom: 0;
   border-radius: 8px 8px 0 0;
-  color: var(--muted);
+  color: var(--faint);
   font-size: 13px;
   user-select: none;
+  transition: background-color 0.1s, color 0.1s;
 }
-.tab:hover { background: var(--hover); color: var(--text); }
+.tab:hover { background: var(--hover); color: var(--muted); }
+/* The tab you're on is part of the page below it: the same background, no line between them */
 .tab.active {
   position: relative;
   z-index: 1;
@@ -207,6 +219,7 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   border-color: var(--border);
   background: var(--bg);
   color: var(--text);
+  font-weight: 500;
 }
 /* Unsaved edits in a tab: a dot after its title (not .unsaved: that's the toolbar's dot) */
 .tab.has-edits .tab-title::after { content: " •"; color: var(--accent); }
@@ -265,6 +278,11 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
 }
 .toolbar button:hover, #show-side:hover { background: var(--hover); color: var(--text); }
 .toolbar button.active { background: var(--accent-soft); color: var(--accent); }
+/* Read / Edit / Source / Split: one control, the current mode raised */
+.mode-switch { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--hover); }
+.toolbar .mode-switch button { padding: 4px 7px; border-radius: 6px; transition: background-color 0.12s, color 0.12s; }
+.toolbar .mode-switch button:hover { background: var(--hover); }
+.toolbar .mode-switch button.active { background: var(--bg); color: var(--accent); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--border); }
 /* Right-click menu */
 .context-menu {
   position: fixed;
@@ -316,6 +334,20 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   font-size: 13px;
 }
 .settings-title { margin-bottom: 10px; font-weight: 600; color: var(--muted); }
+/* A choice of a few options, as one control (the Theme setting) */
+.segmented { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--hover); }
+.segmented button {
+  flex: 1;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.segmented button:hover { color: var(--text); }
+.segmented button[aria-checked="true"] { background: var(--bg); color: var(--text); box-shadow: 0 1px 2px var(--shadow), 0 0 0 1px var(--border); }
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .swatch {
   position: relative;
@@ -324,10 +356,9 @@ body:has(.pane-resizer.dragging) .pane { pointer-events: none; }
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--c-light);
+  background: light-dark(var(--c-light), var(--c-dark));
   cursor: pointer;
 }
-@media (prefers-color-scheme: dark) { .swatch { background: var(--c-dark); } }
 .swatch.custom { background: conic-gradient(#f87171, #fbbf24, #4ade80, #60a5fa, #a78bfa, #f472b6, #f87171); }
 .swatch.custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .swatch.active { outline: 2px solid var(--text); outline-offset: 2px; }
@@ -475,7 +506,28 @@ body:not(.hide-format) .format-toggle { background: var(--accent-soft); color: v
 .markdown li { margin: 0.15em 0; }
 .markdown li::marker { color: var(--faint); }
 .markdown ul.contains-task-list { list-style: none; padding-left: 0.4em; }
-.markdown .task-list-item input { margin: 0 0.5em 0 0; accent-color: var(--accent); }
+/* Task checkboxes, the same in Read and Edit (live.js): drawn here, as a disabled native one turns grey */
+.markdown .task-list-item input, .live-editor .cm-lp-checkbox {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 1em;
+  height: 1em;
+  margin: 0 0.5em 0 0;
+  border: 1.5px solid var(--faint);
+  border-radius: 4px;
+  vertical-align: -0.12em;
+}
+.markdown .task-list-item input:checked, .live-editor .cm-lp-checkbox:checked { border-color: var(--accent); background: var(--accent); }
+.markdown .task-list-item input:checked::after, .live-editor .cm-lp-checkbox:checked::after {
+  content: "";
+  width: 0.5em;
+  height: 0.28em;
+  margin-top: -0.12em;
+  border: solid var(--bg);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
 
 .markdown a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .markdown a.internal-link { text-decoration: none; }
@@ -514,3 +566,25 @@ body:not(.hide-format) .format-toggle { background: var(--accent-soft); color: v
 .callout.folded .callout-content { display: none; }
 .callout-content { margin-top: 6px; }
 .callout-content > :last-child { margin-bottom: 0; }
+
+/* A view appearing (switching between Read, Edit, Source and Split) fades in instead of jumping */
+@keyframes appear { from { opacity: 0; } }
+.view, .editor-pane, .live-surface { animation: appear 0.12s ease-out; }
+
+/* Keyboard focus: one visible ring on everything you can tab to (menus and fields style their own) */
+:where(button, [role="button"], [role="radio"], input[type="checkbox"], select, a):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Windows 11 Mica (Settings: Translucent background): the window's backdrop shows through the sidebar and tab bar,
+   lightly tinted so text stays readable; the reading and editing area stays opaque. */
+body.mica { background: transparent; }
+body.mica #sidebar, body.mica .tabbar { background: light-dark(rgba(255, 255, 255, 0.35), rgba(0, 0, 0, 0.18)); }
+body.mica .pane-body { background: var(--bg); }
+body.mica #filter { background: light-dark(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.05)); }
+.settings-mica { margin-top: 10px; }

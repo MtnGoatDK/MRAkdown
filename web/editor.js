@@ -94,11 +94,13 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
   }
 
   async function createSurface(name) {
+    const title = () => (note?.path ?? '').split('/').pop();
     if (name === 'markdown') {
       const { createLiveSurface } = await import('/__app/live.js');
-      return createLiveSurface(pane, { onInput, calloutColor, fileUrl, resolveWikilink, openLink: openLiveLink });
+      // The title above the text, as the Read view shows it: the file name without its extension
+      const noteTitle = () => (note?.draft ? 'Untitled' : title().replace(/\.[^.]+$/, ''));
+      return createLiveSurface(pane, { onInput, calloutColor, fileUrl, resolveWikilink, openLink: openLiveLink, title: noteTitle });
     }
-    const title = () => (note?.path ?? '').split('/').pop();
     if (name === 'code') {
       const { createCodeSurface } = await import('/__app/live-code.js');
       return createCodeSurface(pane, { onInput, title });
