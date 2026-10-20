@@ -24,8 +24,8 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
   as you type. A file that's all on one line (minified JSON or XML) opens spread over indented lines, without
   changing any value or text, and saving puts it back on one line (Source shows it as it is on disk). JSON in a layout
   of its own can be laid out again with Format, and right-clicking a branch puts just that object or array on one line
-  or spreads it out. Very long lines show only their start, and
-  lines over 500,000 characters (such as embedded images) are read-only in Edit. For CSV and TSV files Edit is the Read
+  or spreads it out. Very long lines show only their start, and lines over 500,000 characters (such as embedded
+  images) are read-only in Edit. For CSV and TSV files Edit is the Read
   view's table, editable, where you can add and remove rows and columns, and only the cells you change are rewritten in
   the file. **Source** shows the plain text, every character as it is; **Split** shows the source and a preview side by
   side. Pasted or dropped images are saved in an `attachments` folder next to the file.
@@ -33,26 +33,29 @@ Windows 10 and 11, and on Linux with recent GTK libraries (see [Linux](#linux)).
   also while you look at other tabs. You're asked Save / Don't save / Cancel before they'd be lost: closing the tab or
   window, or opening another file in it. Turn on "Save automatically" in Settings to have edits saved whenever you
   switch to another file, tab or mode instead. A new file asks where to save it the first time.
-- **Files changed by other programs** show their new version right away. If you have unsaved edits, Settings decides:
+- **Follows changes from other programs:** when a file you have open changes on disk (another editor, `git pull`), it
+  shows the new version right away, and the folder list updates too. If you have unsaved edits in it, Settings decides:
   **Ask me** (default) keeps both when the changes are on different lines, and otherwise lets you compare, keep yours,
   save yours as a copy or reload; **Keep mine** leaves your edits (saving asks before overwriting the new version);
   **Take new** saves your edits as a copy next to the file and shows the new version.
-- **Follows changes from other programs:** when a file you have open changes on disk (another editor, `git pull`),
-  it shows the new version, unless you have unsaved edits in it; the folder list updates too.
+- **Rename a file** by clicking its title above the text, with `F2`, or from its tab's or sidebar entry's right-click
+  menu; open tabs, their history and unsaved edits follow it
 - **Tabs** with their own back/forward history; drag tabs to reorder them, into a new window, or onto another window
 - **Two panes side by side**, each with its own tabs and mode: "Open to the side" from a file, link or tab menu, or
   drag a tab onto the right half of the page
 - **Compare files** side by side, with changed lines and words highlighted and unchanged stretches folded: two files,
   or a file with its last git commit or any earlier commit
 - **Other files open too:** JSON, CSV/TSV and XML in viewers of their own; `.txt`, `.log` and files without an extension
-  as plain text; other text files as code ("View as" picks another viewer, remembered per file type). Text files over
-  20 MB (big logs) open read-only, read from disk in parts as you scroll, whatever their size; one with more lines than
-  a page can hold (about a million) is shown in parts, with buttons for the start, earlier, later and the end
+  as plain text; other text files as code ("View as" picks another viewer, remembered per file type). Long files stay
+  quick: tables and text only draw the rows near the view, and big JSON or XML branches add their items as you scroll.
+  Text files over 20 MB (big logs) open read-only, read from disk in parts as you scroll, whatever their size; one with
+  more lines than a page can hold (about a million) is shown in parts, with buttons for the start, earlier, later and
+  the end
 - **Keeps each file's encoding** (UTF-8, UTF-16, Windows-1252) and line endings (CRLF or LF) when saving. A
   Windows-1252 file that gets characters it can't hold, such as emoji, is saved as UTF-8 instead.
 - **One running instance:** opening more files adds tabs to the window you used last
-- **Settings** (the gear button): theme (system, light or dark), accent colour, automatic saving, and keyboard
-  shortcuts
+- **Settings** (the gear button): theme (system, light or dark), accent colour, automatic saving, what to do when a
+  file you're editing changes on disk, and keyboard shortcuts
 
 MRAkdown has no account and no telemetry of its own; your files are only read and written on your own computer. Web
 links open in your browser, and images that a note embeds from the web load as they would in a browser. (On Windows,
