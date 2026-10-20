@@ -393,6 +393,10 @@ export function createEditor({ view, showNote, setDirty, getMode, isPlain, viewK
     snapshot: (file) => (sameAs(file) && isDirty()
       ? { text: surface.value, saved, crlf, selectionStart: surface.selectionStart, selectionEnd: surface.selectionEnd, scrollTop: surface.scrollTop }
       : null),
+    /** The file being edited ({ root, path }) was renamed to newPath: saving goes to its new name. */
+    renamed(file, newPath) {
+      if (sameAs(file)) note = { ...note, path: newPath };
+    },
     /** Picks up changes made to the file outside the editor, unless there are unsaved edits. */
     refresh: () => (isDirty() || note === null || note.draft ? Promise.resolve() : load(note)),
     focus: () => surface.focus(),

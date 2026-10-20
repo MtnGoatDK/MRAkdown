@@ -588,3 +588,16 @@ body.mica #sidebar, body.mica .tabbar { background: light-dark(rgba(255, 255, 25
 body.mica .pane-body { background: var(--bg); }
 body.mica #filter { background: light-dark(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.05)); }
 .settings-mica { margin-top: 10px; }
+
+/* Renaming a file: its title above the text (click it), its tab or its sidebar entry, edited in place */
+.pane .inline-title { cursor: text; }
+.renaming {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  text-overflow: clip !important;
+  cursor: text;
+  user-select: text;
+}

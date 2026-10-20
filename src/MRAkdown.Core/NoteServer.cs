@@ -68,6 +68,8 @@ static class NoteServer
             ("/__api/source", false) => PageResponse.Text(index.ReadSource(note)),
             ("/__api/render", true) => PageResponse.Json(index.RenderJson(note, BodyText())),
             ("/__api/save", true) => SaveNote(),
+            // Renames the file (to: its new name); the new path, or 409 with the reason it can't be renamed
+            ("/__api/rename", true) => RenameNote(),
             // Where a [[wikilink]] in the note points (for Live mode), as in the reading view; url is null if nowhere.
             ("/__api/resolve", false) => PageResponse.Json(JsonSerializer.Serialize(new
             {
@@ -88,6 +90,18 @@ static class NoteServer
         {
             index.Save(note, BodyText());
             return PageResponse.Text("");
+        }
+
+        PageResponse RenameNote()
+        {
+            try
+            {
+                return PageResponse.Json(JsonSerializer.Serialize(new { path = index.Rename(note, query["to"] ?? "") }));
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                return PageResponse.Text(ex.Message, 409);
+            }
         }
     }
 

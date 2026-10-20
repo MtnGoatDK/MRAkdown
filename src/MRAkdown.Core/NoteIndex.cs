@@ -348,6 +348,38 @@ sealed class NoteIndex
     public void Save(string rel, string text) => TextFiles.Write(ExistingFile(rel), text);
 
     /// <summary>
+    /// Renames a file within its folder and returns its new relative path. <paramref name="name"/> is the new file
+    /// name; a Markdown file named without an extension keeps its own (as its title shows no ".md"). Fails if the
+    /// name isn't a valid file name or another file or folder there has it; changing only the case is allowed.
+    /// </summary>
+    public string Rename(string rel, string name)
+    {
+        var full = ExistingFile(rel);
+        name = name.Trim();
+        if (name.Length == 0 || name.EndsWith('.') || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || name.Contains('/') || name.Contains('\\'))
+            throw new InvalidDataException($"\"{name}\" isn't a valid file name.");
+        if (IsMarkdown(full) && !IsMarkdown(name)) name += Path.GetExtension(full);
+
+        var target = Path.Combine(Path.GetDirectoryName(full)!, name);
+        if (string.Equals(target, full, StringComparison.Ordinal)) return rel;
+        if (string.Equals(target, full, PathComparison))
+        {
+            // Only the case changes: on Windows that's the same file, so move it through a temporary name
+            var temp = full + ".renaming";
+            File.Move(full, temp);
+            File.Move(temp, target);
+        }
+        else
+        {
+            if (File.Exists(target) || Directory.Exists(target))
+                throw new InvalidDataException($"There's already a file named \"{name}\" in this folder.");
+            File.Move(full, target);
+        }
+        return Rel(target);
+    }
+
+    /// <summary>
     /// A note rendered to HTML, or for any other file its plain text ({ markdown: false, text }),
     /// or a flag if it isn't text ({ binary: true }) or is too large ({ tooLarge: true }).
     /// </summary>

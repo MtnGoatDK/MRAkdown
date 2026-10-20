@@ -138,6 +138,7 @@ buttons can't).
 | `Ctrl+N` / `Ctrl+Shift+N` | New file / new window |
 | `Ctrl+O` / `Ctrl+Shift+O` | Open file / open folder |
 | `Ctrl+S` | Save (asks where, for a new file) |
+| `F2` | Rename the file (or click its title, or right-click its tab or its entry in the folder panel) |
 | `Ctrl+E` / `Ctrl+U` / `Ctrl+Shift+E` | Toggle Edit / Source / Split mode |
 | `Ctrl+P` | Search files (`Enter` opens the first match, `Esc` clears) |
 | `Ctrl+T` (or the + after the tabs), `Ctrl+W`, `Ctrl+Shift+T` | New, close, reopen tab |

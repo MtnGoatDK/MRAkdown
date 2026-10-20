@@ -206,6 +206,7 @@ function fileItem(n) {
       { label: 'Open in new tab', hint: 'Ctrl+click', action: () => openIn(root, n.path, 'background') },
       { label: 'Open in new window', hint: 'Shift+click', action: () => openIn(root, n.path, 'window') },
       ...compareItems(root, n.path, activePane?.activeTab, 'open now'),
+      { label: 'Rename', action: () => renameTreeItem(el, n, root) },
     ]);
   });
   return el;
@@ -580,8 +581,150 @@ function tabMenu(tab) {
     items.push({ label: other ? 'Move to other pane' : 'Move to the side', action: () => moveTab(tab, ensureOtherPane(pane)) });
   }
   if (isFile) items.push(...compareItems(tab.root, tab.path, other?.activeTab, 'other pane'));
+  if (isFile) items.push({ label: 'Rename', hint: shortcutHint('rename'), action: () => renameTab(tab) });
   items.push({ label: 'Close', hint: shortcutHint('closeTab'), action: () => closeTab(tab) });
   return items;
+}
+
+/* ---------- Renaming a file ---------- */
+
+// A file is renamed by editing its name where it shows: the title above the text (click it), its tab or its entry in
+// the sidebar (F2 or right-click). A Markdown file's name shows without ".md", and keeps it.
+
+/** True while a file name is being edited in el (then the note or the sidebar there isn't re-rendered). */
+const isRenaming = (el) => Boolean(el?.querySelector('.renaming'));
+
+/**
+ * Lets the user edit an element's text in place. Resolves with the text when Enter is pressed or focus leaves it,
+ * or null for Escape (the text goes back). The name is selected without its extension, as in Explorer.
+ */
+function editInPlace(el) {
+  return new Promise((resolve) => {
+    const before = el.textContent;
+    el.contentEditable = 'plaintext-only';
+    el.spellcheck = false;
+    el.classList.add('renaming');
+    el.focus();
+    const text = el.firstChild;
+    const dot = before.lastIndexOf('.');
+    const range = document.createRange();
+    if (text) range.setStart(text, 0), range.setEnd(text, dot > 0 ? dot : before.length);
+    else range.selectNodeContents(el);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+
+    const stop = (e) => e.stopPropagation(); // keeps the tab's drag and the app's shortcuts out of it
+    const onKey = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); finish(el.textContent); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(null); }
+    };
+    const onBlur = () => finish(el.textContent);
+    let done = false;
+    function finish(value) {
+      if (done) return;
+      done = true;
+      el.removeAttribute('contenteditable');
+      el.classList.remove('renaming');
+      el.removeEventListener('keydown', onKey);
+      el.removeEventListener('blur', onBlur);
+      el.removeEventListener('pointerdown', stop);
+      if (value === null) el.textContent = before;
+      resolve(value);
+    }
+    el.addEventListener('keydown', onKey);
+    el.addEventListener('blur', onBlur);
+    el.addEventListener('pointerdown', stop);
+  });
+}
+
+/**
+ * Renames a file (root, path) to name, and moves everything that shows it along: its tabs, their back/forward
+ * history, an editor that has it open (its unsaved edits stay, and are saved under the new name), the titles.
+ * Resolves with the new path, or null if nothing changed or renaming failed (the reason is shown).
+ */
+async function renameFile(root, path, name) {
+  name = name.replace(/\s+/g, ' ').trim();
+  if (!name || name === noteTitle(path)) return null;
+  const res = await fetch('/__api/rename' + apiQuery(root, path) + '&to=' + encodeURIComponent(name), { method: 'POST' });
+  if (!res.ok) {
+    alert(`Couldn't rename "${noteTitle(path)}":\n${await res.text()}`);
+    return null;
+  }
+  const newPath = (await res.json()).path;
+  for (const pane of panes) {
+    for (const tab of pane.tabs) {
+      if (tab.root !== root || tab.diff) continue;
+      if (tab.path === path) {
+        tab.path = newPath;
+        tab.title = noteTitle(newPath);
+      }
+      for (const entry of [...tab.back, ...tab.forward]) if (entry.path === path) entry.path = newPath;
+    }
+    if (pane.activeTab?.root === root && pane.current === path) {
+      pane.current = newPath;
+      pane.editor?.renamed({ root, path }, newPath);
+      for (const title of pane.el.querySelectorAll('.inline-title')) title.textContent = noteTitle(newPath);
+    }
+    renderTabs(pane);
+  }
+  markActive();
+  updateTitle();
+  return newPath;
+}
+
+/** Renames a tab's file by editing the tab's title. */
+async function renameTab(tab) {
+  const title = [...(paneOf(tab)?.el.querySelectorAll('.tab') ?? [])].find((t) => t._tab === tab)?.querySelector('.tab-title');
+  if (!title || !tab.path) return;
+  const name = await editInPlace(title);
+  if (name === null || !(await renameFile(tab.root, tab.path, name))) {
+    title.textContent = tab.title;
+    onRootChanged(tab.root); // catch up on changes not shown while the name was being edited
+  }
+}
+
+/** F2: renames the file in the active pane, by its title above the text if that shows, else by its tab. */
+function renameCurrent() {
+  const pane = activePane;
+  const tab = pane?.activeTab;
+  if (!tab?.path || tab.draft || tab.diff) return;
+  const shown = [...pane.el.querySelectorAll('.inline-title')].find((t) => t.offsetParent !== null);
+  if (shown) renameByTitle(pane, shown);
+  else renameTab(tab);
+}
+
+async function renameByTitle(pane, title) {
+  const tab = pane.activeTab;
+  if (!tab?.path || tab.draft || tab.diff || title.isContentEditable) return;
+  const name = await editInPlace(title);
+  if (name === null || !(await renameFile(tab.root, tab.path, name))) {
+    title.textContent = tab.title;
+    onRootChanged(tab.root); // catch up on changes not shown while the name was being edited
+  }
+}
+
+// Clicking the title above the text (in Read or Edit) renames the file
+document.addEventListener('click', (e) => {
+  const title = e.target.closest?.('.pane .inline-title');
+  const pane = title && panes.find((p) => p.el.contains(title));
+  if (pane && !title.isContentEditable) renameByTitle(pane, title);
+});
+
+/** Renames a file from the sidebar, by editing its entry (n: its node in the tree, updated to the new name). */
+async function renameTreeItem(el, n, root) {
+  const label = el.querySelector('span');
+  const name = await editInPlace(label);
+  const newPath = name === null ? null : await renameFile(root, n.path, name);
+  if (!newPath) {
+    label.textContent = n.name;
+    onRootChanged(root); // catch up on changes not shown while the name was being edited
+    return;
+  }
+  n.path = newPath;
+  n.name = noteTitle(newPath);
+  el.dataset.path = newPath;
+  el.title = newPath;
 }
 
 async function activateTab(tab) {
@@ -1179,7 +1322,9 @@ async function openNote(pane, path, { hash = '', history = 'push', keepScroll = 
   // Rendered before the folder scan finished: re-render once it has, so links to other folders resolve.
   if (!note.indexed) {
     (treeRequests.get(tab.root) ?? loadTree(tab.root)).then(() => {
-      if (pane.activeTab === tab && pane.current === note.path) openNote(pane, note.path, { history: 'none', keepScroll: true });
+      if (pane.activeTab === tab && pane.current === note.path && !isRenaming(pane.el)) {
+        openNote(pane, note.path, { history: 'none', keepScroll: true });
+      }
     });
   }
   return note;
@@ -1624,6 +1769,7 @@ const ACTIONS = [
   { id: 'openFolder', group: 'Files', label: 'Open folder', keys: ['Ctrl+Shift+O'], run: () => openFolder() },
   { id: 'save', group: 'Files', label: 'Save', keys: ['Ctrl+S'], run: () => saveActiveTab() },
   { id: 'reload', group: 'Files', label: 'Reload the file and folder', keys: ['F5', 'Ctrl+R'], run: () => reloadCurrent() },
+  { id: 'rename', group: 'Files', label: 'Rename the file', keys: ['F2'], run: () => renameCurrent() },
   { id: 'search', group: 'Files', label: 'Search files', keys: ['Ctrl+P'], run: () => { filter.focus(); filter.select(); } },
   { id: 'newTab', group: 'Tabs and windows', label: 'New tab', keys: ['Ctrl+T'], run: () => newEmptyTab() },
   {
@@ -2061,9 +2207,11 @@ hostBridge.addEventListener('message', async (e) => {
 
 /** Files in a root folder changed on disk: refresh its tree, and the files shown from that folder. */
 async function onRootChanged(root) {
-  if (trees.has(root)) await loadTree(root);
+  // Not while a name is being edited there (see "Renaming a file"): re-rendering would replace what's being edited
+  if (trees.has(root) && !isRenaming($('#tree'))) await loadTree(root);
   for (const pane of panes) {
     const tab = pane.activeTab;
+    if (isRenaming(pane.el)) continue;
     if (tab?.diff) {
       if (tab.diff.left.root === root || tab.diff.right.root === root) showDiff(pane, tab, { keepScroll: true });
     } else if (tab?.root === root && pane.current) {

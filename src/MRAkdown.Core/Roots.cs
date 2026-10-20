@@ -92,6 +92,10 @@ static class Roots
         Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(
             OperatingSystem.IsWindows() ? fullPath.ToLowerInvariant() : fullPath)))[..10];
 
+    // The watchers, kept referenced: a FileSystemWatcher that nothing refers to can be garbage collected, and then it
+    // silently stops reporting changes (the sidebar stopped updating after the first change).
+    static readonly List<FileSystemWatcher> Watchers = [];
+
     static async void Watch(NoteIndex index)
     {
         var ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Roots must be used on the UI thread");
@@ -126,6 +130,7 @@ static class Roots
             watcher.Created += onChange;
             watcher.Deleted += onChange;
             watcher.Renamed += (s, e) => onChange(s, e);
+            lock (Watchers) Watchers.Add(watcher);
             // Starting it adds a watch for every subfolder, which takes seconds for a big folder on Linux: not on the UI thread.
             _ = Task.Run(() => watcher.EnableRaisingEvents = true);
         }
