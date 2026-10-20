@@ -51,6 +51,20 @@
   font-size: 12px;
   cursor: pointer;
 }
+/* The hidden rest of a long line (minified files) */
+.live-editor.live-code .cm-long-more {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--faint);
+  font: 12px "Inter", "Segoe UI", system-ui, sans-serif;
+}
+.live-code-note { display: none; }
+.live-code-unparsed .live-code-note { display: inline; }
+/* Format and Minify are for JSON; a file too long-lined to parse has no branches to expand or collapse */
+.live-code-xml .viewer-actions [data-op="format"], .live-code-xml .viewer-actions [data-op="minify"],
+.live-code-unparsed .viewer-actions [data-op="expand"], .live-code-unparsed .viewer-actions [data-op="collapse"] { display: none; }
 .live-editor.live-code .cm-matchingBracket { background: var(--accent-soft); outline: 1px solid var(--accent); }
 .live-editor.live-code .cm-tooltip { background: var(--bg-side); border: 1px solid var(--border); color: var(--text); }
 

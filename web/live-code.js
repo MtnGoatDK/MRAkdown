@@ -45,7 +45,13 @@ const OPEN_BUDGET_MS = 150;
 const BUTTON_BUDGET_MS = 5000;
 // Files bigger than this can't be read in OPEN_BUDGET_MS anyway (about 10 MB/s), so they don't try
 const OPEN_FOLD_MAX = 1_500_000;
-const WRAP_MAX_LINE = 10_000;
+// Lines longer than this show only their start, followed by how much is hidden, and files with them don't wrap
+// lines (wrapping a huge line takes seconds). Read mode shows such lines in full.
+const LONG_LINE = 10_000;
+const LONG_LINE_SHOWN = 1_000;
+// Files with a line this long (minified files: the whole file on one line) aren't parsed for colours and branches,
+// and are read-only here: every keystroke would re-read the whole line. Format (JSON) spreads them over lines.
+const PARSE_MAX_LINE = 2_000_000;
 
 const JSON_VALUES = new Set(['Object', 'Array', 'String', 'Number', 'True', 'False', 'Null']);
 const XML_CHILDREN = new Set(['Element', 'Comment', 'Cdata', 'ProcessingInst']);
@@ -94,6 +100,77 @@ class Toggle extends WidgetType {
   ignoreEvent() { return false; }
 }
 
+/** What follows the start of a long line: how much of it is hidden. */
+class More extends WidgetType {
+  constructor(count) { super(); this.count = count; }
+  eq(other) { return other.count === this.count; }
+  toDOM() {
+    const el = document.createElement('span');
+    el.className = 'cm-long-more';
+    el.textContent = `… ${this.count.toLocaleString()} more characters on this line`;
+    el.title = 'Long lines show only their start here. Read mode shows all of it; for JSON, Format spreads it over lines.';
+    return el;
+  }
+}
+
+/**
+ * Re-indents JSON (indent: the text for one level), or with indent null puts it all on one line. Only the spaces and
+ * line breaks between values change: strings, numbers and escapes are kept exactly as written.
+ */
+function reflowJson(text, indent) {
+  const out = [];
+  const pad = [];
+  const newline = (depth) => (indent === null ? '' : (pad[depth] ??= '\n' + indent.repeat(depth)));
+  let depth = 0;
+  for (let i = 0; i < text.length;) {
+    const ch = text[i];
+    if (ch === '"') {
+      // A string, to its closing quote (one not escaped by an odd number of backslashes)
+      let end = i + 1;
+      for (;;) {
+        end = text.indexOf('"', end);
+        if (end === -1) { end = text.length; break; }
+        let slashes = 0;
+        while (text[end - 1 - slashes] === '\\') slashes++;
+        if (slashes % 2 === 0) break;
+        end++;
+      }
+      out.push(text.slice(i, end + 1));
+      i = end + 1;
+    } else if (ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t') {
+      i++;
+    } else if (ch === '{' || ch === '[') {
+      let next = i + 1;
+      while (' \n\r\t'.includes(text[next]) && next < text.length) next++;
+      if (text[next] === (ch === '{' ? '}' : ']')) {
+        out.push(ch + text[next]); // empty: {} or []
+        i = next + 1;
+      } else {
+        depth++;
+        out.push(ch + newline(depth));
+        i++;
+      }
+    } else if (ch === '}' || ch === ']') {
+      depth--;
+      out.push(newline(depth) + ch);
+      i++;
+    } else if (ch === ',') {
+      out.push(',' + newline(depth));
+      i++;
+    } else if (ch === ':') {
+      out.push(indent === null ? ':' : ': ');
+      i++;
+    } else {
+      // A number, true, false or null
+      let end = i;
+      while (end < text.length && !',:{}[]" \n\r\t'.includes(text[end])) end++;
+      out.push(text.slice(i, end));
+      i = end;
+    }
+  }
+  return out.join('');
+}
+
 /** The length of a text's longest line. */
 function longestLine(text) {
   let max = 0;
@@ -122,10 +199,17 @@ function indentUnit(text) {
  */
 export function createCodeSurface(parent, host) {
   const editable = new Compartment();
+  const languageSlot = new Compartment();
+  const wrapSlot = new Compartment();
+  const readOnlySlot = new Compartment();
   let disabled = true;
   let kind = 'json';
   let unit = 2;
-  let wrap = true;
+  let mode = { wrap: true, parse: true }; // off for files with long lines (see LONG_LINE and PARSE_MAX_LINE)
+  const modeFor = (text) => {
+    const longest = longestLine(text);
+    return { wrap: longest <= LONG_LINE, parse: longest <= PARSE_MAX_LINE };
+  };
 
   // Our own element around the editor, for the classes editor.js sets (which surface is in use). It scrolls, with
   // the file name and summary bar above the editor, as in the Read view.
@@ -138,10 +222,12 @@ export function createCodeSurface(parent, host) {
   header.innerHTML = `
     <div class="inline-title"></div>
     <div class="viewer-bar">
-      <span class="viewer-info"></span>
+      <span><span class="viewer-info"></span><span class="live-code-note"></span></span>
       <div class="viewer-actions">
         <button type="button" data-op="expand">Expand all</button>
         <button type="button" data-op="collapse">Collapse all</button>
+        <button type="button" data-op="format" title="Spread the JSON over indented lines (values stay exactly as written; Undo reverts it)">Format</button>
+        <button type="button" data-op="minify" title="Put the JSON on one line (values stay exactly as written; Undo reverts it)">Minify</button>
       </div>
     </div>`;
   const info = header.querySelector('.viewer-info');
@@ -153,6 +239,8 @@ export function createCodeSurface(parent, host) {
     const op = e.target.closest('button')?.dataset.op;
     if (op === 'collapse') collapseFrom(1, BUTTON_BUDGET_MS);
     else if (op === 'expand') unfoldAll(view);
+    else if (op === 'format') reflow('  ');
+    else if (op === 'minify') reflow(null);
   });
   root.append(header);
 
@@ -184,11 +272,11 @@ export function createCodeSurface(parent, host) {
   }
 
   const tree = ViewPlugin.fromClass(class {
-    constructor(view) { this.decorations = this.build(view); }
+    constructor(view) { this.build(view); }
     update(u) {
       if (u.docChanged || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)
         || u.transactions.some((tr) => tr.effects.some((e) => e.is(foldEffect) || e.is(unfoldEffect)))) {
-        this.decorations = this.build(u.view);
+        this.build(u.view);
       }
     }
     // Only for the lines on screen: indentation widened to the Read view's levels, guide lines, and the ▸
@@ -197,11 +285,20 @@ export function createCodeSurface(parent, host) {
       const folded = foldedRanges(state);
       const widen = Decoration.mark({ attributes: { style: `letter-spacing: calc(${LEVEL_PX / unit}px - 1ch)` } });
       const ranges = [];
+      const hidden = [];
+      const done = new Set();
       for (const { from, to } of view.visibleRanges) {
         for (let pos = from; pos <= to;) {
           const line = state.doc.lineAt(pos);
           pos = line.to + 1;
-          if (line.from < from) continue; // the rest of a line after a collapsed branch
+          if (done.has(line.number)) continue;
+          done.add(line.number);
+          if (line.length > LONG_LINE) {
+            // Only its start, then how much is hidden
+            hidden.push(Decoration.replace({ widget: new More(line.length - LONG_LINE_SHOWN) }).range(line.from + LONG_LINE_SHOWN, line.to));
+          } else if (line.from < from) {
+            continue; // the rest of a line after a collapsed branch
+          }
           // Only the start of the line: a minified file is one line of millions of characters
           const spaces = /^ */.exec(state.sliceDoc(line.from, Math.min(line.to, line.from + 1000)))[0].length;
           const level = Math.floor(spaces / unit);
@@ -213,10 +310,13 @@ export function createCodeSurface(parent, host) {
           ranges.push(Decoration.widget({ widget: new Toggle(toggle), side: -1 }).range(line.from + spaces));
         }
       }
-      return Decoration.set(ranges, true);
+      this.hidden = Decoration.set(hidden, true);
+      this.decorations = Decoration.set([...ranges, ...hidden], true);
     }
   }, {
     decorations: (p) => p.decorations,
+    // The cursor steps over the hidden part of a long line as one piece
+    provide: (plugin) => EditorView.atomicRanges.of((view) => view.plugin(plugin)?.hidden ?? Decoration.none),
     eventHandlers: {
       mousedown(e, view) {
         const el = e.target.closest?.('.cm-tree-toggle.open, .cm-tree-toggle.closed');
@@ -259,17 +359,22 @@ export function createCodeSurface(parent, host) {
     closeBrackets(),
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...foldKeymap, indentWithTab]),
     syntaxHighlighting(codeStyle),
-    KINDS[kind].language(),
+    languageSlot.of(mode.parse ? KINDS[kind].language() : []),
+    readOnlySlot.of(EditorState.readOnly.of(!mode.parse)),
     kind === 'json' ? jsonLinter : [],
     folding,
     tree,
-    wrap ? EditorView.lineWrapping : [],
+    wrapSlot.of(mode.wrap ? EditorView.lineWrapping : []),
     editable.of(EditorView.editable.of(!disabled)),
     // CodeMirror manages its element's classes, so they're given here rather than added afterwards
     EditorView.editorAttributes.of({ class: 'live-editor live-code' }),
     EditorView.updateListener.of((u) => {
       if (!u.docChanged) return;
       host.onInput();
+      // Undoing or redoing Format/Minify changes whether the file has long lines
+      if (u.transactions.some((tr) => tr.isUserEvent('undo') || tr.isUserEvent('redo'))) {
+        setTimeout(() => setMode(modeFor(view.state.doc.toString())));
+      }
       if (kind === 'xml') {
         clearTimeout(xmlTimer);
         xmlTimer = setTimeout(xmlInfo, 400);
@@ -279,6 +384,39 @@ export function createCodeSurface(parent, host) {
 
   const view = new EditorView({ parent: root, state: EditorState.create({ doc: '', extensions: extensions() }) });
   let known = { text: '', doc: view.state.doc }; // a document known to equal a text (see differs)
+
+  /** Turns wrapping and parsing on or off, for the file's longest line (see LONG_LINE and PARSE_MAX_LINE). */
+  function setMode(next) {
+    root.classList.toggle('live-code-unparsed', !next.parse);
+    const effects = [];
+    if (next.parse !== mode.parse) {
+      effects.push(languageSlot.reconfigure(next.parse ? KINDS[kind].language() : []));
+      effects.push(readOnlySlot.reconfigure(EditorState.readOnly.of(!next.parse)));
+    }
+    if (next.wrap !== mode.wrap) effects.push(wrapSlot.reconfigure(next.wrap ? EditorView.lineWrapping : []));
+    mode = next;
+    if (effects.length) view.dispatch({ effects });
+  }
+
+  /** Format (indent: one level's text) or Minify (null) the JSON, as one edit. Only for valid JSON. */
+  function reflow(indent) {
+    const text = view.state.doc.toString();
+    try {
+      JSON.parse(text);
+    } catch {
+      return; // the summary already says what's wrong
+    }
+    let result = reflowJson(text, indent);
+    if (text.endsWith('\n')) result += '\n';
+    if (result === text) return;
+    // Turning parsing off before the edit, or on after it, so the parser never reads one huge line
+    const next = modeFor(result);
+    if (indent) unit = indent.length;
+    if (!next.parse) setMode({ ...mode, parse: false });
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: result }, userEvent: 'input.format', scrollIntoView: false });
+    setMode(next);
+    root.scrollTop = 0;
+  }
 
   /**
    * Collapses the branches from a level down (0 is the outermost), as the Read view shows them. False if reading the
@@ -316,6 +454,9 @@ export function createCodeSurface(parent, host) {
       if (!KINDS[k]) return;
       kind = k;
       root.classList.toggle('live-code-xml', k === 'xml');
+      header.querySelector('.live-code-note').textContent = k === 'json'
+        ? ' · Minified, so read-only here: Format to edit it'
+        : ' · One very long line, so read-only here (Read mode shows all of it)';
     },
     get value() { return view.state.doc.toString(); },
     /** Replaces the whole text with a fresh document (and a fresh undo history), in the current language. */
@@ -323,12 +464,12 @@ export function createCodeSurface(parent, host) {
       header.querySelector('.inline-title').textContent = host.title();
       setInfo('');
       unit = indentUnit(text);
-      // Long lines wrap, except in files with huge lines (minified files): wrapping those takes seconds
-      wrap = longestLine(text) <= WRAP_MAX_LINE;
+      mode = modeFor(text);
+      root.classList.toggle('live-code-unparsed', !mode.parse);
       view.setState(EditorState.create({ doc: text, extensions: extensions() }));
       known = { text, doc: view.state.doc };
       // The same levels open as in the Read view (when the file is quick to read; big files start expanded)
-      if (text.length <= OPEN_FOLD_MAX) collapseFrom(OPEN_DEPTH[kind], OPEN_BUDGET_MS);
+      if (text.length <= OPEN_FOLD_MAX && mode.parse) collapseFrom(OPEN_DEPTH[kind], OPEN_BUDGET_MS);
       if (kind === 'xml') xmlInfo();
     },
     /**
